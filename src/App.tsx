@@ -467,7 +467,7 @@ function App(){
         </>}
       </section>}
     </main>
-    {foodModal&&<FoodModal data={foodModal.food} onClose={()=>setFoodModal(null)} onSave={d=>saveFood(foodModal.place,foodModal.sub,d,foodModal.food?.id)}/>}
+    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)}/>}
     {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
     {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={removePlace}/>}
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
