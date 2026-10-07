@@ -494,7 +494,7 @@ function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
   return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>
 }
 
-function FoodModal({data,placeId,subId,places,onClose,onSave}:{data?:Food;placeId:string;subId:string;places:Place[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void}){
+function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?:Food;placeId:string;subId:string;places:Place[];recentFoods:RecentFood[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void}){
   const[name,setName]=useState(data?.name||'');
   const[quantity,setQuantity]=useState(data?.quantity||1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
