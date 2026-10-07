@@ -3,12 +3,14 @@ import{Apple,Box,ChevronRight,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackageP
 import{supabase}from'./lib/supabase';
 
 type Unit='unidades'|'pacotes'|'latas'|'garrafas'|'kg'|'g'|'L'|'ml';
+type RecentFood={name:string;unit:Unit};
 type Food={id:string;name:string;quantity:number;unit:Unit};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type UndoState={label:string;action:()=>void};
 
 const units:Unit[]=['unidades','pacotes','latas','garrafas','kg','g','L','ml'];
+const recentFoodsKey='organizapp-recent-foods';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
@@ -74,6 +76,7 @@ function mapCloudPlaces(data:any[]):Place[]{
 
 function App(){
   const[places,setPlaces]=useState<Place[]>(()=>normalize(JSON.parse(localStorage.getItem('organizapp')||'null')));
+  const[recentFoods,setRecentFoods]=useState<RecentFood[]>(()=>{try{const raw=JSON.parse(localStorage.getItem(recentFoodsKey)||'[]');return Array.isArray(raw)?raw.slice(0,8):[]}catch{return[]}});
   const[userId,setUserId]=useState<string|null>(null);
   const[user,setUser]=useState<any>(null);
   const[synced,setSynced]=useState(false);
@@ -145,6 +148,15 @@ function App(){
 
   useEffect(()=>{localStorage.setItem('organizapp',JSON.stringify(places))},[places]);
 
+  function rememberFood(name:string,unit:Unit){
+    setRecentFoods(prev=>{
+      const key=name.trim().toLowerCase();
+      const next=[{name:name.trim(),unit},...prev.filter(f=>f.name.trim().toLowerCase()!==key)].slice(0,8);
+      localStorage.setItem(recentFoodsKey,JSON.stringify(next));
+      return next;
+    });
+  }
+
   useEffect(()=>{
     if(!foodMenu)return;
     const close=()=>setFoodMenu(null);
@@ -182,7 +194,7 @@ function App(){
         if(data.user&&data.session&&local.length){
           try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Conta criada, mas não foi possível sincronizar os dados locais ainda.')}
         }
-        if(!authMessage)setAuthMessage(data.session?'Conta criada e dados sincronizados.':'Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
+        setAuthMessage(data.session?'Conta criada e dados sincronizados.':'Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
         if(data.session)setAuthModal(false);
       }else{
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
@@ -194,7 +206,7 @@ function App(){
           }
         }
         setAuthModal(false);
-        if(!authMessage)setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+        setAuthMessage('Login realizado. Seus dados estão sincronizados.');
       }
     }finally{setAuthBusy(false)}
   }
@@ -234,6 +246,7 @@ function App(){
       const{error}=await supabase.from('foods').upsert({id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit});
       if(error){setPlaces(snapshot);syncError('Não foi possível salvar o alimento.');return}
     }
+    rememberFood(food.name,food.unit);
     setFoodModal(null);
   }
 
@@ -425,8 +438,8 @@ function App(){
         </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>):null}
       </section>:<section>
         <div className="hero">
-          <div><p className="eyebrow">BEM-VINDO</p><h2>O que você tem em casa?</h2><p>Organize seus alimentos por local e subdivisão para encontrar tudo rapidamente.</p></div>
-          <div className="total"><span>{total}</span><small>{total===1?'item cadastrado':'itens cadastrados'}</small></div>
+          <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre tudo em um instante.</h2><p>Organize seus alimentos por onde eles ficam e mantenha tudo sob controle sem complicação.</p></div>
+          <div className="total"><span>{total}</span><small>{total===1?'alimento':'alimentos'}</small><em>{places.length} {places.length===1?'local':'locais'}</em></div>
         </div>
         <div className="search">
           <Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
@@ -478,12 +491,15 @@ function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
   return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>
 }
 
-function FoodModal({data,onClose,onSave}:{data?:Food;onClose:()=>void;onSave:(d:Omit<Food,'id'>)=>void}){
+function FoodModal({data,recentFoods,existingFoods,onClose,onSave}:{data?:Food;recentFoods:RecentFood[];existingFoods:Food[];onClose:()=>void;onSave:(d:Omit<Food,'id'>)=>void}){
   const[name,setName]=useState(data?.name||'');
   const[quantity,setQuantity]=useState(data?.quantity||1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
+  const duplicate=!!name.trim()&&existingFoods.some(f=>f.id!==data?.id&&f.name.trim().toLowerCase()===name.trim().toLowerCase());
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
+    {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
+    {duplicate&&<div className="duplicate-note"><strong>Este alimento já existe nesta divisão.</strong><span>Você pode somar a quantidade ao item existente depois, ou adicionar mesmo assim.</span></div>}
     <div className="row">
       <label>Quantidade<div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
