@@ -379,6 +379,8 @@ function App(){
     setSelectedSub(p?.subdivisions[0]?.id||null);
   }
 
+  function openAddFoodFromHome(){ setFoodModal({place:'',sub:''}); }
+
   return <div className="app">
     <header>
       <div className="brand">
@@ -445,6 +447,7 @@ function App(){
           <Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
           {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
         </div>
+        {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>Adicionar alimento</strong><small>Registre algo novo na sua casa</small></span><ChevronRight size={18}/></button>}
         {search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}>
           <Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/>
         </button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
@@ -491,12 +494,24 @@ function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
   return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>
 }
 
-function FoodModal({data,recentFoods,existingFoods,onClose,onSave}:{data?:Food;recentFoods:RecentFood[];existingFoods:Food[];onClose:()=>void;onSave:(d:Omit<Food,'id'>)=>void}){
+function FoodModal({data,placeId,subId,places,onClose,onSave}:{data?:Food;placeId:string;subId:string;places:Place[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void}){
   const[name,setName]=useState(data?.name||'');
   const[quantity,setQuantity]=useState(data?.quantity||1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
+  const[chosenPlace,setChosenPlace]=useState(placeId);
+  const[chosenSub,setChosenSub]=useState(subId);
+  const currentPlace=places.find(p=>p.id===chosenPlace);
+  const existingFoods=currentPlace?.subdivisions.find(s=>s.id===chosenSub)?.foods||[];
   const duplicate=!!name.trim()&&existingFoods.some(f=>f.id!==data?.id&&f.name.trim().toLowerCase()===name.trim().toLowerCase());
+  const canSave=!!name.trim()&&!!chosenPlace&&!!chosenSub;
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
+    {!data&&<div className="destination-fields">
+      <div className="destination-title"><span>Onde ele fica?</span><small>Escolha o local e a subdivisão.</small></div>
+      <div className="row">
+        <label>Local<select value={chosenPlace} onChange={e=>{setChosenPlace(e.target.value);setChosenSub(places.find(p=>p.id===e.target.value)?.subdivisions[0]?.id||'')}}><option value="">Selecione...</option>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label>Subdivisão<select value={chosenSub} disabled={!chosenPlace} onChange={e=>setChosenSub(e.target.value)}><option value="">Selecione...</option>{currentPlace?.subdivisions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      </div>
+    </div>}
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
     {duplicate&&<div className="duplicate-note"><strong>Este alimento já existe nesta divisão.</strong><span>Você pode somar a quantidade ao item existente depois, ou adicionar mesmo assim.</span></div>}
@@ -504,7 +519,7 @@ function FoodModal({data,recentFoods,existingFoods,onClose,onSave}:{data?:Food;r
       <label>Quantidade<div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
     </div>
-    <button className="primary full" disabled={!name.trim()} onClick={()=>onSave({name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
+    <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,chosenSub,{name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
   </Modal>
 }
 
