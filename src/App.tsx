@@ -249,8 +249,7 @@ function App(){
     }
     setFoodMenu(null);
     offerUndo('Alimento removido',()=>{
-      const restored=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:[...s.foods,removed]})});
-      setPlaces(restored);
+      setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.some(f=>f.id===removed.id)?s.foods:[...s.foods,removed]})}));
       if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit});
     });
   }
@@ -296,12 +295,11 @@ function App(){
     const destinationPlace=places.find(p=>p.id===toPlaceId);
     const destinationSub=destinationPlace?.subdivisions.find(s=>s.id===toSubId);
     offerUndo('Alimento movido',()=>{
-      const restored=next.map(p=>{
+      setPlaces(ps=>ps.map(p=>{
         if(p.id===toPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===toSubId?{...s,foods:s.foods.filter(f=>f.id!==foodId)}:s)};
-        if(p.id===fromPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:[...s.foods,food]}:s)};
+        if(p.id===fromPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:s.foods.some(f=>f.id===foodId)?s.foods:[...s.foods,food]}:s)};
         return p;
-      });
-      setPlaces(restored);
+      }));
       if(userId)supabase.from('foods').update({subdivision_id:fromSubId}).eq('id',foodId);
     });
     setFoodMenu(null);
