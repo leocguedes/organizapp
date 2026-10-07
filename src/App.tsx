@@ -379,7 +379,7 @@ function App(){
     setSelectedSub(p?.subdivisions[0]?.id||null);
   }
 
-  function openAddFoodFromHome(){ setFoodModal({place:'',sub:''}); }
+  function openAddFoodFromHome(){ if(!places.length){setPlaceToEdit(null);setPlaceModal(true);return;} setFoodModal({place:'',sub:''}); }
 
   return <div className="app">
     <header>
@@ -447,7 +447,7 @@ function App(){
           <Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
           {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
         </div>
-        {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>Adicionar alimento</strong><small>Registre algo novo na sua casa</small></span><ChevronRight size={18}/></button>}
+        {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
         {search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}>
           <Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/>
         </button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
