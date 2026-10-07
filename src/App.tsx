@@ -420,9 +420,9 @@ function App(){
           </div>)}
         </div>
         {selectedSub&&sub?<><div className="selected-sub-head"><div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div><span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span></div>{sub.foods.length?<div className="food-list">
-          {sub.foods.map(f=><div className="food" key={f.id}>
+          {sub.foods.map(f=><div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
             <div className="food-icon"><Apple size={19}/></div>
-            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity} {f.unit}</span></div>
+            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity===0?'Sem estoque':f.quantity+' '+f.unit}</span></div>
             <div className="qty">
               <button onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
               <b>{f.quantity}</b>
