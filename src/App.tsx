@@ -1,33 +1,543 @@
-import{useEffect,useMemo,useState}from'react';import{Apple,Box,ChevronRight,Edit3,Home,Minus,PackagePlus,Plus,Search,Settings,Trash2,X}from'lucide-react';import{supabase}from'./lib/supabase';
+import{useEffect,useMemo,useRef,useState}from'react';
+import{Apple,Box,ChevronRight,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,X}from'lucide-react';
+import{supabase}from'./lib/supabase';
 
 type Unit='unidades'|'pacotes'|'latas'|'garrafas'|'kg'|'g'|'L'|'ml';
-type Food={id:string;name:string;quantity:number;unit:Unit};type Sub={id:string;name:string;foods:Food[]};type Place={id:string;name:string;subdivisions:Sub[]};
-const units:Unit[]=['unidades','pacotes','latas','garrafas','kg','g','L','ml'];const uid=()=>crypto.randomUUID();const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
-const initial:Place[]=[{id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},{id:uid(),name:'Freezer',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},{id:uid(),name:'Armário',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]},{id:uid(),name:'Gavetas',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},{id:uid(),name:'Despensa',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]}];
-function normalize(raw:any):Place[]{if(!Array.isArray(raw))return initial;return raw.map((p:any)=>({id:isUUID(p.id)?p.id:uid(),name:p.name,subdivisions:(p.subdivisions?.length?p.subdivisions:[{id:uid(),name:'Geral',foods:p.foods||[]}]).map((s:any)=>({id:isUUID(s.id)?s.id:uid(),name:s.name,foods:(s.foods||[]).map((f:any)=>({id:isUUID(f.id)?f.id:uid(),name:f.name,quantity:Number(f.quantity)||0,unit:f.unit||'unidades'}))}))}));}
+type Food={id:string;name:string;quantity:number;unit:Unit};
+type Sub={id:string;name:string;foods:Food[]};
+type Place={id:string;name:string;subdivisions:Sub[]};
+type UndoState={label:string;action:()=>void};
+
+const units:Unit[]=['unidades','pacotes','latas','garrafas','kg','g','L','ml'];
+const uid=()=>crypto.randomUUID();
+const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
+const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
+const initial:Place[]=[
+  {id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},
+  {id:uid(),name:'Freezer',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},
+  {id:uid(),name:'Armário',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]},
+  {id:uid(),name:'Gavetas',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},
+  {id:uid(),name:'Despensa',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]}
+];
+
+function normalize(raw:any):Place[]{
+  if(!Array.isArray(raw))return initial;
+  return raw.map((p:any)=>({
+    id:isUUID(p.id)?p.id:uid(),
+    name:p.name,
+    subdivisions:(p.subdivisions?.length?p.subdivisions:[{id:uid(),name:'Geral',foods:p.foods||[]}]).map((s:any)=>({
+      id:isUUID(s.id)?s.id:uid(),
+      name:s.name,
+      foods:(s.foods||[]).map((f:any)=>({
+        id:isUUID(f.id)?f.id:uid(),
+        name:f.name,
+        quantity:Number(f.quantity)||0,
+        unit:f.unit||'unidades'
+      }))
+    }))
+  }));
+}
+
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v)}
-async function getCloud():Promise<{userId:string;places:Place[]}|null>{const{data:session}=await supabase.auth.getSession();let user=session.session?.user;if(!user){const{data,error}=await supabase.auth.signInAnonymously();if(error||!data.user)return null;user=data.user}const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');if(error)return null;return{userId:user.id,places:(data||[]).map((p:any)=>({id:p.id,name:p.name,subdivisions:(p.subdivisions||[]).map((s:any)=>({id:s.id,name:s.name,foods:(s.foods||[]).map((f:any)=>({id:f.id,name:f.name,quantity:Number(f.quantity),unit:f.unit as Unit}))}))}))}}
-async function uploadLocal(userId:string,places:Place[]){for(const p of places){await supabase.from('locations').upsert({id:p.id,user_id:userId,name:p.name});for(const s of p.subdivisions){await supabase.from('subdivisions').upsert({id:s.id,user_id:userId,location_id:p.id,name:s.name});for(const f of s.foods)await supabase.from('foods').upsert({id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit})}}}
-function App(){const[places,setPlaces]=useState<Place[]>(()=>normalize(JSON.parse(localStorage.getItem('organizapp')||'null')));const[userId,setUserId]=useState<string|null>(null);const[user,setUser]=useState<any>(null);const[synced,setSynced]=useState(false);const[authBusy,setAuthBusy]=useState(false);const[authMessage,setAuthMessage]=useState<string|null>(null);const[authModal,setAuthModal]=useState(false);const[selected,setSelected]=useState<string|null>(null);const[selectedSub,setSelectedSub]=useState<string|null>(null);const[search,setSearch]=useState('');const[foodModal,setFoodModal]=useState<{place:string;sub:string;food?:Food}|null>(null);const[placeModal,setPlaceModal]=useState(false);const[subModal,setSubModal]=useState<{place:string;sub?:Sub}|null>(null);
-useEffect(()=>{let active=true;const load=async()=>{const{data:session}=await supabase.auth.getSession();const current=session.session?.user||null;const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));if(!active)return;if(!current){setUser(null);setUserId(null);setSynced(false);setPlaces(local);return}setUser(current);setUserId(current.id);const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');if(error){setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');setPlaces(local);return}const cloudPlaces=(data||[]).map((p:any)=>({id:p.id,name:p.name,subdivisions:(p.subdivisions||[]).map((s:any)=>({id:s.id,name:s.name,foods:(s.foods||[]).map((f:any)=>({id:f.id,name:f.name,quantity:Number(f.quantity),unit:f.unit as Unit}))}))}));if(cloudPlaces.length===0&&local.length){await uploadLocal(current.id,local);if(active)setPlaces(local)}else if(active)setPlaces(cloudPlaces);if(active)setSynced(true)};load();const{data:listener}=supabase.auth.onAuthStateChange(async(_event,session)=>{if(!active)return;if(!session?.user){setUser(null);setUserId(null);setSynced(false);return}setUser(session.user);setUserId(session.user.id);const{data}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');if(active&&data)setPlaces((data as any[]).map((p:any)=>({id:p.id,name:p.name,subdivisions:(p.subdivisions||[]).map((s:any)=>({id:s.id,name:s.name,foods:(s.foods||[]).map((f:any)=>({id:f.id,name:f.name,quantity:Number(f.quantity),unit:f.unit as Unit}))}))})));setSynced(true)});return()=>{active=false;listener.subscription.unsubscribe()};},[]);
-useEffect(()=>{localStorage.setItem('organizapp',JSON.stringify(places))},[places]);
-async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){setAuthBusy(true);setAuthMessage(null);const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));try{if(mode==='signup'){const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});if(error){setAuthMessage(error.message);return}if(data.user&&data.session&&local.length)await uploadLocal(data.user.id,local);setAuthMessage(data.session?'Conta criada e dados sincronizados.':'Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');if(data.session)setAuthModal(false)}else{const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error){setAuthMessage(error.message);return}if(data.user&&local.length){const{data:cloud}=await supabase.from('locations').select('id').limit(1);if(!cloud?.length)await uploadLocal(data.user.id,local)}setAuthModal(false);setAuthMessage('Login realizado. Seus dados estão sincronizados.')}}finally{setAuthBusy(false)}}
-async function resetPassword(email:string){setAuthBusy(true);setAuthMessage(null);try{const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:authRedirectUrl()});setAuthMessage(error?'Não foi possível enviar o link de recuperação.':'Enviamos um link de recuperação para seu e-mail.')}finally{setAuthBusy(false)}}
-async function signOut(){await supabase.auth.signOut();setUser(null);setUserId(null);setSynced(false);setAuthMessage(null)}
-const current=places.find(p=>p.id===selected);const sub=current?.subdivisions.find(s=>s.id===selectedSub);const total=places.reduce((n,p)=>n+p.subdivisions.reduce((m,s)=>m+s.foods.length,0),0);
-const results=useMemo(()=>{const q=search.trim().toLowerCase();if(!q)return[];return places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>f.name.toLowerCase().includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))))},[search,places]);
-async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){const food={...data,id:id||uid()};setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:id?s.foods.map(f=>f.id===id?food:f):[...s.foods,food]})}));if(userId)await supabase.from('foods').upsert({id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit});setFoodModal(null)}
-async function removeFood(placeId:string,subId:string,id:string){setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.filter(f=>f.id!==id)})}));if(userId)await supabase.from('foods').delete().eq('id',id)}
-async function changeQty(placeId:string,subId:string,id:string,delta:number){let next=0;setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>{if(f.id===id){next=Math.max(0,f.quantity+delta);return{...f,quantity:next}}return f})})}));if(userId)await supabase.from('foods').update({quantity:next}).eq('id',id)}
-async function savePlace(name:string,id?:string){const clean=name.trim();if(!clean)return;const placeId=id||uid();const newSub=id?null:makeSub('Geral');if(id)setPlaces(ps=>ps.map(p=>p.id===id?{...p,name:clean}:p));else setPlaces(ps=>[...ps,{id:placeId,name:clean,subdivisions:[newSub!]}]);if(userId){await supabase.from('locations').upsert({id:placeId,user_id:userId,name:clean});if(newSub)await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name})}setPlaceModal(false)}
-async function removePlace(id:string){setPlaces(ps=>ps.filter(p=>p.id!==id));if(userId)await supabase.from('locations').delete().eq('id',id);if(selected===id){setSelected(null);setSelectedSub(null)}}
-async function saveSub(placeId:string,name:string,id?:string){const clean=name.trim();if(!clean)return;const subId=id||uid();if(id)setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id===id?{...s,name:clean}:s)}));else setPlaces(ps=>ps.map(p=>p.id===placeId?{...p,subdivisions:[...p.subdivisions,{id:subId,name:clean,foods:[]}]}:p));if(userId)await supabase.from('subdivisions').upsert({id:subId,user_id:userId,location_id:placeId,name:clean});setSubModal(null)}
-async function removeSub(placeId:string,id:string){setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.filter(s=>s.id!==id)}));if(userId)await supabase.from('subdivisions').delete().eq('id',id);if(selectedSub===id)setSelectedSub(null)}
-function openPlace(id:string){setSelected(id);const p=places.find(x=>x.id===id);setSelectedSub(p?.subdivisions[0]?.id||null)}
-return <div className="app"><header><div className="brand"><div className="logo"><Home size={20}/></div><div><h1>OrganizaApp</h1><span>Sua casa, organizada.</span></div></div><div className="header-actions"><button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>{user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}</button><button className="icon-btn" onClick={()=>setPlaceModal(true)} title="Gerenciar locais"><Settings size={20}/></button></div></header><main>{authMessage&&<div className="auth-note">{authMessage}</div>}{selected?<section><button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button><div className="section-head"><div><p className="eyebrow">LOCAL</p><h2>{current?.name}</h2><p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'item':'itens'} · {synced?'Sincronizado':'Somente neste dispositivo'}</p></div><button className="primary" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={19}/> Adicionar alimento</button></div><div className="sub-head"><h3>Divisões deste local</h3><button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova subdivisão</button></div><div className="sub-list">{current?.subdivisions.map(s=><div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}><button className="sub-select" onClick={()=>setSelectedSub(s.id)}><span><strong>{s.name}</strong><small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small></span><ChevronRight size={18}/></button><button className="sub-edit" title="Renomear subdivisão" aria-label={"Renomear "+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}><Edit3 size={16}/></button></div>)}</div>{selectedSub&&sub?(sub.foods.length?<div className="food-list">{sub.foods.map(f=><div className="food" key={f.id}><div className="food-icon"><Apple size={19}/></div><div className="food-name"><strong>{f.name}</strong><span>{f.quantity} {f.unit}</span></div><div className="qty"><button onClick={()=>changeQty(selected,selectedSub,f.id,-1)}><Minus size={15}/></button><b>{f.quantity}</b><button onClick={()=>changeQty(selected,selectedSub,f.id,1)}><Plus size={15}/></button></div><button className="small" onClick={()=>setFoodModal({place:selected,sub:selectedSub,food:f})}><Edit3 size={17}/></button><button className="small danger" onClick={()=>removeFood(selected,selectedSub,f.id)}><Trash2 size={17}/></button></div>)}</div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>):null}</section>:<section><div className="hero"><div><p className="eyebrow">BEM-VINDO</p><h2>O que você tem em casa?</h2><p>Organize seus alimentos por local e subdivisão para encontrar tudo rapidamente.</p></div><div className="total"><span>{total}</span><small>{total===1?'item cadastrado':'itens cadastrados'}</small></div></div><div className="search"><Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>{search&&<button onClick={()=>setSearch('')}><X size={17}/></button>}</div>{search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}><Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/></button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>setPlaceModal(true)}><Plus size={17}/> Novo local</button></div><div className="places">{places.map(p=><div className="place-card" key={p.id} onClick={()=>openPlace(p.id)}><div className="place-top"><div className="place-icon"><Box size={21}/></div><div className="place-card-actions"><button className="card-edit" title="Renomear local" aria-label={"Renomear "+p.name} onClick={e=>{e.stopPropagation();setPlaceModal(true)}}><Edit3 size={16}/></button><div className="arrow">→</div></div></div><h3>{p.name}</h3><p>{p.subdivisions.length} {p.subdivisions.length===1?'subdivisão':'subdivisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} itens</p><div className="progress"><span style={{width:p.subdivisions.some(s=>s.foods.length)?'100%':'0%'}}/></div></div>)}</div></>}</section>}</main>{foodModal&&<FoodModal data={foodModal.food} onClose={()=>setFoodModal(null)} onSave={d=>saveFood(foodModal.place,foodModal.sub,d,foodModal.food?.id)}/>} {placeModal&&<PlaceModal places={places} onClose={()=>setPlaceModal(false)} onSave={savePlace} onDelete={removePlace}/>} {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>} {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}</div>}
-function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>void;onSubmit:(mode:'signin'|'signup',email:string,password:string)=>void;onReset:(email:string)=>void}){const[mode,setMode]=useState<'signin'|'signup'>('signin');const[email,setEmail]=useState('');const[password,setPassword]=useState('');return <Modal title={mode==='signin'?'Entrar no OrganizaApp':'Criar sua conta'} onClose={onClose}><p className="modal-help">{mode==='signin'?'Entre para acessar seus alimentos em qualquer dispositivo.':'Crie uma conta para manter seu histórico sincronizado no celular, PC e outros navegadores.'}</p><label>E-mail<input type="email" autoFocus value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@email.com" autoComplete="email"/></label><label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" autoComplete={mode==='signin'?'current-password':'new-password'}/></label><button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>{mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}<button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button></Modal>}
-function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>}
-function FoodModal({data,onClose,onSave}:{data?:Food;onClose:()=>void;onSave:(d:Omit<Food,'id'>)=>void}){const[name,setName]=useState(data?.name||'');const[quantity,setQuantity]=useState(data?.quantity||1);const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}><label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label><div className="row"><label>Quantidade<div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))}/><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label><label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label></div><button className="primary full" disabled={!name.trim()} onClick={()=>onSave({name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button></Modal>}
-function PlaceModal({places,onClose,onSave,onDelete}:{places:Place[];onClose:()=>void;onSave:(name:string,id?:string)=>void;onDelete:(id:string)=>void}){const[name,setName]=useState('');const[edit,setEdit]=useState<Place|null>(null);return <Modal title={edit?'Editar local':'Gerenciar locais'} onClose={onClose}>{!edit&&<><p className="modal-help">Cada local pode ter suas próprias subdivisões.</p><div className="manage-list">{places.map(p=><div key={p.id}><span><strong>{p.name}</strong><small>{p.subdivisions.length} subdivisões</small></span><div><button onClick={()=>{setEdit(p);setName(p.name)}}><Edit3 size={16}/></button><button className="danger" onClick={()=>onDelete(p.id)}><Trash2 size={16}/></button></div></div>)}</div></>}{edit&&<button className="back modal-back" onClick={()=>setEdit(null)}>← Voltar aos locais</button>}<label>{edit?'Nome do local':'Novo local'}<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Geladeira"/></label><button className="primary full" disabled={!name.trim()} onClick={()=>{onSave(name,edit?.id);setEdit(null);setName('')}}>{edit?'Salvar alterações':'Criar local'}</button></Modal>}
-function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onSave:(name:string)=>void;onDelete:(id:string)=>void}){const[name,setName]=useState(data?.name||'');return <Modal title={data?'Editar subdivisão':'Nova subdivisão'} onClose={onClose}><p className="modal-help">{data?'Altere o nome desta divisão.':'Crie uma divisão como “Gaveta de cima”, “Porta” ou “Prateleira 2”.'}</p><label>Nome<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Gaveta de cima"/></label><button className="primary full" disabled={!name.trim()} onClick={()=>onSave(name)}>{data?'Salvar alterações':'Criar subdivisão'}</button>{data&&data.foods.length===0&&<button className="text-danger" onClick={()=>{onDelete(data.id);onClose()}}><Trash2 size={15}/> Excluir subdivisão</button>}</Modal>}
-function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){return <div className="overlay" onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button onClick={onClose}><X/></button></div>{children}</div></div>}export default App;
+
+async function uploadLocal(userId:string,places:Place[]){
+  for(const p of places){
+    const{error:placeError}=await supabase.from('locations').upsert({id:p.id,user_id:userId,name:p.name});
+    if(placeError)throw placeError;
+    for(const s of p.subdivisions){
+      const{error:subError}=await supabase.from('subdivisions').upsert({id:s.id,user_id:userId,location_id:p.id,name:s.name});
+      if(subError)throw subError;
+      for(const f of s.foods){
+        const{error:foodError}=await supabase.from('foods').upsert({id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit});
+        if(foodError)throw foodError;
+      }
+    }
+  }
+}
+
+function mapCloudPlaces(data:any[]):Place[]{
+  return(data||[]).map((p:any)=>({
+    id:p.id,
+    name:p.name,
+    subdivisions:(p.subdivisions||[]).map((s:any)=>({
+      id:s.id,
+      name:s.name,
+      foods:(s.foods||[]).map((f:any)=>({
+        id:f.id,
+        name:f.name,
+        quantity:Number(f.quantity),
+        unit:f.unit as Unit
+      }))
+    }))
+  }));
+}
+
+function App(){
+  const[places,setPlaces]=useState<Place[]>(()=>normalize(JSON.parse(localStorage.getItem('organizapp')||'null')));
+  const[userId,setUserId]=useState<string|null>(null);
+  const[user,setUser]=useState<any>(null);
+  const[synced,setSynced]=useState(false);
+  const[authBusy,setAuthBusy]=useState(false);
+  const[authMessage,setAuthMessage]=useState<string|null>(null);
+  const[authModal,setAuthModal]=useState(false);
+  const[selected,setSelected]=useState<string|null>(null);
+  const[selectedSub,setSelectedSub]=useState<string|null>(null);
+  const[search,setSearch]=useState('');
+  const[foodModal,setFoodModal]=useState<{place:string;sub:string;food?:Food}|null>(null);
+  const[moveModal,setMoveModal]=useState<{place:string;sub:string;food:Food}|null>(null);
+  const[foodMenu,setFoodMenu]=useState<string|null>(null);
+  const[placeModal,setPlaceModal]=useState(false);
+  const[placeToEdit,setPlaceToEdit]=useState<string|null>(null);
+  const[subModal,setSubModal]=useState<{place:string;sub?:Sub}|null>(null);
+  const[undo,setUndo]=useState<UndoState|null>(null);
+  const undoTimer=useRef<number|null>(null);
+
+  useEffect(()=>{
+    let active=true;
+    const load=async()=>{
+      const{data:session}=await supabase.auth.getSession();
+      const current= session.session?.user||null;
+      const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));
+      if(!active)return;
+      if(!current){
+        setUser(null);
+        setUserId(null);
+        setSynced(false);
+        setPlaces(local);
+        return;
+      }
+      setUser(current);
+      setUserId(current.id);
+      const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+      if(error){
+        setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
+        setPlaces(local);
+        return;
+      }
+      const cloudPlaces=mapCloudPlaces(data||[]);
+      if(cloudPlaces.length===0&&local.length){
+        try{
+          await uploadLocal(current.id,local);
+          if(active)setPlaces(local);
+        }catch{
+          if(active)setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
+        }
+      }else if(active)setPlaces(cloudPlaces);
+      if(active)setSynced(true);
+    };
+    load();
+    const{data:listener}=supabase.auth.onAuthStateChange(async(_event,session)=>{
+      if(!active)return;
+      if(!session?.user){
+        setUser(null);
+        setUserId(null);
+        setSynced(false);
+        return;
+      }
+      setUser(session.user);
+      setUserId(session.user.id);
+      const{data}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+      if(active&&data)setPlaces(mapCloudPlaces(data));
+      setSynced(true);
+    });
+    return()=>{active=false;listener.subscription.unsubscribe()};
+  },[]);
+
+  useEffect(()=>{localStorage.setItem('organizapp',JSON.stringify(places))},[places]);
+
+  useEffect(()=>{
+    if(!foodMenu)return;
+    const close=()=>setFoodMenu(null);
+    document.addEventListener('click',close);
+    return()=>document.removeEventListener('click',close);
+  },[foodMenu]);
+
+  useEffect(()=>()=>{if(undoTimer.current)window.clearTimeout(undoTimer.current)},[]);
+
+  function offerUndo(label:string,action:()=>void){
+    if(undoTimer.current)window.clearTimeout(undoTimer.current);
+    setUndo({label,action});
+    undoTimer.current=window.setTimeout(()=>setUndo(null),5000);
+  }
+
+  function consumeUndo(){
+    if(!undo)return;
+    undo.action();
+    setUndo(null);
+    if(undoTimer.current)window.clearTimeout(undoTimer.current);
+  }
+
+  function syncError(message='Não foi possível sincronizar esta alteração.'){
+    setAuthMessage(message+' O dado local foi preservado.');
+  }
+
+  async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
+    setAuthBusy(true);
+    setAuthMessage(null);
+    const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));
+    try{
+      if(mode==='signup'){
+        const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});
+        if(error){setAuthMessage(error.message);return}
+        if(data.user&&data.session&&local.length){
+          try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Conta criada, mas não foi possível sincronizar os dados locais ainda.')}
+        }
+        if(!authMessage)setAuthMessage(data.session?'Conta criada e dados sincronizados.':'Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
+        if(data.session)setAuthModal(false);
+      }else{
+        const{data,error}=await supabase.auth.signInWithPassword({email,password});
+        if(error){setAuthMessage(error.message);return}
+        if(data.user&&local.length){
+          const{data:cloud}=await supabase.from('locations').select('id').limit(1);
+          if(!cloud?.length){
+            try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Login realizado, mas não foi possível concluir a sincronização dos dados locais.')}
+          }
+        }
+        setAuthModal(false);
+        if(!authMessage)setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+      }
+    }finally{setAuthBusy(false)}
+  }
+
+  async function resetPassword(email:string){
+    setAuthBusy(true);
+    setAuthMessage(null);
+    try{
+      const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:authRedirectUrl()});
+      setAuthMessage(error?'Não foi possível enviar o link de recuperação.':'Enviamos um link de recuperação para seu e-mail.');
+    }finally{setAuthBusy(false)}
+  }
+
+  async function signOut(){
+    await supabase.auth.signOut();
+    setUser(null);
+    setUserId(null);
+    setSynced(false);
+    setAuthMessage(null);
+  }
+
+  const current=places.find(p=>p.id===selected);
+  const sub=current?.subdivisions.find(s=>s.id===selectedSub);
+  const total=places.reduce((n,p)=>n+p.subdivisions.reduce((m,s)=>m+s.foods.length,0),0);
+  const results=useMemo(()=>{
+    const q=search.trim().toLowerCase();
+    if(!q)return[];
+    return places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>f.name.toLowerCase().includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))));
+  },[search,places]);
+
+  async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){
+    const food={...data,id:id||uid()};
+    const snapshot=places;
+    const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:id?s.foods.map(f=>f.id===id?food:f):[...s.foods,food]})});
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('foods').upsert({id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit});
+      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o alimento.');return}
+    }
+    setFoodModal(null);
+  }
+
+  async function removeFood(placeId:string,subId:string,id:string){
+    const snapshot=places;
+    const removed=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===id);
+    if(!removed)return;
+    const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.filter(f=>f.id!==id)})});
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('foods').delete().eq('id',id);
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o alimento.');return}
+    }
+    setFoodMenu(null);
+    offerUndo('Alimento removido',()=>{
+      const restored=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:[...s.foods,removed]})});
+      setPlaces(restored);
+      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit});
+    });
+  }
+
+  async function changeQty(placeId:string,subId:string,id:string,delta:number){
+    const food=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===id);
+    if(!food)return;
+    const nextQty=Math.max(0,food.quantity+delta);
+    if(nextQty===food.quantity)return;
+    const snapshot=places;
+    const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>f.id===id?{...f,quantity:nextQty}:f)})});
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('foods').update({quantity:nextQty}).eq('id',id);
+      if(error){setPlaces(snapshot);syncError('Não foi possível atualizar a quantidade.');}
+    }
+  }
+
+  async function moveFood(fromPlaceId:string,fromSubId:string,foodId:string,toPlaceId:string,toSubId:string){
+    if(fromSubId===toSubId)return;
+    const sourcePlace=places.find(p=>p.id===fromPlaceId);
+    const sourceSub=sourcePlace?.subdivisions.find(s=>s.id===fromSubId);
+    const food=sourceSub?.foods.find(f=>f.id===foodId);
+    if(!food)return;
+    const snapshot=places;
+    const next=places.map(p=>{
+      if(p.id===fromPlaceId){
+        return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:s.foods.filter(f=>f.id!==foodId)}:s)};
+      }
+      return p;
+    }).map(p=>{
+      if(p.id===toPlaceId){
+        return{...p,subdivisions:p.subdivisions.map(s=>s.id===toSubId?{...s,foods:[...s.foods,food]}:s)};
+      }
+      return p;
+    });
+    setPlaces(next);
+    setMoveModal(null);
+    if(userId){
+      const{error}=await supabase.from('foods').update({subdivision_id:toSubId}).eq('id',foodId);
+      if(error){setPlaces(snapshot);syncError('Não foi possível mover o alimento.');return}
+    }
+    const destinationPlace=places.find(p=>p.id===toPlaceId);
+    const destinationSub=destinationPlace?.subdivisions.find(s=>s.id===toSubId);
+    offerUndo('Alimento movido',()=>{
+      const restored=next.map(p=>{
+        if(p.id===toPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===toSubId?{...s,foods:s.foods.filter(f=>f.id!==foodId)}:s)};
+        if(p.id===fromPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:[...s.foods,food]}:s)};
+        return p;
+      });
+      setPlaces(restored);
+      if(userId)supabase.from('foods').update({subdivision_id:fromSubId}).eq('id',foodId);
+    });
+    setFoodMenu(null);
+    if(destinationPlace&&destinationSub)setAuthMessage(null);
+  }
+
+  async function savePlace(name:string,id?:string){
+    const clean=name.trim();
+    if(!clean)return;
+    const placeId=id||uid();
+    const newSub=id?null:makeSub('Geral');
+    const snapshot=places;
+    const next=id?places.map(p=>p.id===id?{...p,name:clean}:p):[...places,{id:placeId,name:clean,subdivisions:[newSub!]}];
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('locations').upsert({id:placeId,user_id:userId,name:clean});
+      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return}
+      if(newSub){
+        const{subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
+        if(subError.error){setPlaces(snapshot);syncError('Não foi possível criar a subdivisão inicial.');return}
+      }
+    }
+    setPlaceModal(false);
+    setPlaceToEdit(null);
+  }
+
+  async function removePlace(id:string){
+    const snapshot=places;
+    setPlaces(ps=>ps.filter(p=>p.id!==id));
+    if(userId){
+      const{error}=await supabase.from('locations').delete().eq('id',id);
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');}
+    }
+    if(selected===id){setSelected(null);setSelectedSub(null)}
+  }
+
+  async function saveSub(placeId:string,name:string,id?:string){
+    const clean=name.trim();
+    if(!clean)return;
+    const subId=id||uid();
+    const snapshot=places;
+    const next=id?places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id===id?{...s,name:clean}:s)}):places.map(p=>p.id===placeId?{...p,subdivisions:[...p.subdivisions,{id:subId,name:clean,foods:[]}]}:p);
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('subdivisions').upsert({id:subId,user_id:userId,location_id:placeId,name:clean});
+      if(error){setPlaces(snapshot);syncError('Não foi possível salvar a subdivisão.');return}
+    }
+    setSubModal(null);
+  }
+
+  async function removeSub(placeId:string,id:string){
+    const snapshot=places;
+    setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.filter(s=>s.id!==id)}));
+    if(userId){
+      const{error}=await supabase.from('subdivisions').delete().eq('id',id);
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir a subdivisão.');return}
+    }
+    if(selectedSub===id)setSelectedSub(null);
+  }
+
+  function openPlace(id:string){
+    setSelected(id);
+    const p=places.find(x=>x.id===id);
+    setSelectedSub(p?.subdivisions[0]?.id||null);
+  }
+
+  return <div className="app">
+    <header>
+      <div className="brand">
+        <div className="logo"><Home size={20}/></div>
+        <div><h1>OrganizaApp</h1><span>Sua casa, organizada.</span></div>
+      </div>
+      <div className="header-actions">
+        <button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>
+          {user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}
+        </button>
+        <button className="icon-btn" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}} title="Gerenciar locais"><Settings size={20}/></button>
+      </div>
+    </header>
+    <main>
+      {authMessage&&<div className="auth-note">{authMessage}</div>}
+      {selected?<section>
+        <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
+        <div className="section-head">
+          <div>
+            <p className="eyebrow">LOCAL</p>
+            <h2>{current?.name}</h2>
+            <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'item':'itens'} · {synced?'Sincronizado':'Somente neste dispositivo'}</p>
+          </div>
+          <button className="primary" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={19}/> Adicionar alimento</button>
+        </div>
+        <div className="sub-head">
+          <h3>Divisões deste local</h3>
+          <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova subdivisão</button>
+        </div>
+        <div className="sub-list">
+          {current?.subdivisions.map(s=><div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
+            <button className="sub-select" onClick={()=>setSelectedSub(s.id)}>
+              <span><strong>{s.name}</strong><small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small></span>
+              <ChevronRight size={18}/>
+            </button>
+            <button className="sub-edit" title="Renomear subdivisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}><Edit3 size={16}/></button>
+          </div>)}
+        </div>
+        {selectedSub&&sub?(sub.foods.length?<div className="food-list">
+          {sub.foods.map(f=><div className="food" key={f.id}>
+            <div className="food-icon"><Apple size={19}/></div>
+            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity} {f.unit}</span></div>
+            <div className="qty">
+              <button onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
+              <b>{f.quantity}</b>
+              <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}><Plus size={15}/></button>
+            </div>
+            <div className="food-actions">
+              <button className="small action-trigger" title="Mais ações" aria-label={'Mais ações para '+f.name} onClick={e=>{e.stopPropagation();setFoodMenu(foodMenu===f.id?null:f.id)}}><MoreHorizontal size={18}/></button>
+              {foodMenu===f.id&&<div className="action-menu" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>{setFoodModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><Edit3 size={16}/> Editar</button>
+                <button onClick={()=>{setMoveModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><MoveRight size={16}/> Mover para...</button>
+                <button className="danger" onClick={()=>removeFood(selected,selectedSub,f.id)}><Trash2 size={16}/> Excluir</button>
+              </div>}
+            </div>
+          </div>)}
+        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>):null}
+      </section>:<section>
+        <div className="hero">
+          <div><p className="eyebrow">BEM-VINDO</p><h2>O que você tem em casa?</h2><p>Organize seus alimentos por local e subdivisão para encontrar tudo rapidamente.</p></div>
+          <div className="total"><span>{total}</span><small>{total===1?'item cadastrado':'itens cadastrados'}</small></div>
+        </div>
+        <div className="search">
+          <Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
+          {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
+        </div>
+        {search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}>
+          <Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/>
+        </button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
+          <div className="places">
+            {places.map(p=><div className="place-card" key={p.id} onClick={()=>openPlace(p.id)}>
+              <div className="place-top">
+                <div className="place-icon"><Box size={21}/></div>
+                <div className="place-card-actions">
+                  <button className="card-edit" title="Renomear local" aria-label={'Renomear '+p.name} onClick={e=>{e.stopPropagation();setPlaceToEdit(p.id);setPlaceModal(true)}}><Edit3 size={16}/></button>
+                  <div className="arrow">→</div>
+                </div>
+              </div>
+              <h3>{p.name}</h3>
+              <p>{p.subdivisions.length} {p.subdivisions.length===1?'subdivisão':'subdivisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} itens</p>
+            </div>)}
+          </div>
+        </>}
+      </section>}
+    </main>
+    {foodModal&&<FoodModal data={foodModal.food} onClose={()=>setFoodModal(null)} onSave={d=>saveFood(foodModal.place,foodModal.sub,d,foodModal.food?.id)}/>}
+    {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
+    {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={removePlace}/>}
+    {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
+    {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+    {undo&&<div className="undo-toast"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
+  </div>
+}
+
+function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>void;onSubmit:(mode:'signin'|'signup',email:string,password:string)=>void;onReset:(email:string)=>void}){
+  const[mode,setMode]=useState<'signin'|'signup'>('signin');
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  return <Modal title={mode==='signin'?'Entrar no OrganizaApp':'Criar sua conta'} onClose={onClose}>
+    <p className="modal-help">{mode==='signin'?'Entre para acessar seus alimentos em qualquer dispositivo.':'Crie uma conta para manter seu histórico sincronizado no celular, PC e outros navegadores.'}</p>
+    <label>E-mail<input type="email" autoFocus value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@email.com" autoComplete="email"/></label>
+    <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" autoComplete={mode==='signin'?'current-password':'new-password'}/></label>
+    <button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>
+    {mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}
+    <button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button>
+  </Modal>
+}
+
+function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
+  return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>
+}
+
+function FoodModal({data,onClose,onSave}:{data?:Food;onClose:()=>void;onSave:(d:Omit<Food,'id'>)=>void}){
+  const[name,setName]=useState(data?.name||'');
+  const[quantity,setQuantity]=useState(data?.quantity||1);
+  const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
+  return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
+    <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
+    <div className="row">
+      <label>Quantidade><div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
+      <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
+    </div>
+    <button className="primary full" disabled={!name.trim()} onClick={()=>onSave({name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
+  </Modal>
+}
+
+function MoveModal({data,places,onClose,onMove}:{data:{place:string;sub:string;food:Food};places:Place[];onClose:()=>void;onMove:(fromPlaceId:string,fromSubId:string,foodId:string,toPlaceId:string,toSubId:string)=>void}){
+  return <Modal title="Mover alimento" onClose={onClose}>
+    <div className="move-current"><span>Movendo</span><strong>{data.food.name}</strong><small>{data.food.quantity} {data.food.unit} · {places.find(p=>p.id===data.place)?.name} · {places.find(p=>p.id===data.place)?.subdivisions.find(s=>s.id===data.sub)?.name}</small></div>
+    <p className="modal-help move-help">Escolha o novo destino.</p>
+    <div className="move-list">
+      {places.map(p=><div className="move-place" key={p.id}>
+        <div className="move-place-head"><strong>{p.name}</strong><small>{p.subdivisions.length} {p.subdivisions.length===1?'subdivisão':'subdivisões'}</small></div>
+        <div className="move-sub-list">
+          {p.subdivisions.map(s=>{
+            const same=s.id===data.sub;
+            return <button key={s.id} className={same?'current':''} disabled={same} onClick={()=>onMove(data.place,data.sub,data.food.id,p.id,s.id)}>
+              <span>{s.name}</span>{same?<small>Atual</small>:<ChevronRight size={16}/>}
+            </button>
+          })}
+        </div>
+      </div>)}
+    </div>
+  </Modal>
+}
+
+function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place[];initialEditId?:string|null;onClose:()=>void;onSave:(name:string,id?:string)=>void;onDelete:(id:string)=>void}){
+  const initialEdit=places.find(p=>p.id===initialEditId)||null;
+  const[name,setName]=useState(initialEdit?.name||'');
+  const[edit,setEdit]=useState<Place|null>(initialEdit);
+  return <Modal title={edit?'Editar local':'Gerenciar locais'} onClose={onClose}>
+    {!edit&&<><p className="modal-help">Cada local pode ter suas próprias subdivisões.</p><div className="manage-list">{places.map(p=><div key={p.id}><span><strong>{p.name}</strong><small>{p.subdivisions.length} subdivisões</small></span><div><button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name}><Edit3 size={16}/></button><button className="danger" onClick={()=>onDelete(p.id)} title={'Excluir '+p.name}><Trash2 size={16}/></button></div></div>)}</div></>}
+    {edit&&<button className="back modal-back" onClick={()=>{setEdit(null);setName('')}}>← Voltar aos locais</button>}
+    <label>{edit?'Nome do local':'Novo local'}<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Geladeira"/></label>
+    <button className="primary full" disabled={!name.trim()} onClick={()=>{onSave(name,edit?.id);setEdit(null);setName('')}}>{edit?'Salvar alterações':'Criar local'}</button>
+  </Modal>
+}
+
+function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onSave:(name:string)=>void;onDelete:(id:string)=>void}){
+  const[name,setName]=useState(data?.name||'');
+  return <Modal title={data?'Editar subdivisão':'Nova subdivisão'} onClose={onClose}>
+    <p className="modal-help">{data?'Altere o nome desta divisão.':'Crie uma divisão como “Gaveta de cima”, “Porta” ou “Prateleira 2”.'}</p>
+    <label>Nome<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Gaveta de cima"/></label>
+    <button className="primary full" disabled={!name.trim()} onClick={()=>onSave(name)}>{data?'Salvar alterações':'Criar subdivisão'}</button>
+    {data&&data.foods.length===0&&<button className="text-danger" onClick={()=>{onDelete(data.id);onClose()}}><Trash2 size={15}/> Excluir subdivisão</button>}
+  </Modal>
+}
+
+function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
+  return <div className="overlay" onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button onClick={onClose} aria-label="Fechar"><X/></button></div>{children}</div></div>
+}
+
+export default App;
