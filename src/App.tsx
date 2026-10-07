@@ -402,7 +402,7 @@ function App(){
           <div>
             <p className="eyebrow">LOCAL</p>
             <h2>{current?.name}</h2>
-            <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'item':'itens'} · {synced?'Sincronizado':'Somente neste dispositivo'}</p>
+            <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'item':'itens'} <span className="sync-status">{synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
           </div>
           <button className="primary" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={19}/> Adicionar alimento</button>
         </div>
@@ -419,7 +419,7 @@ function App(){
             <button className="sub-edit" title="Renomear subdivisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}><Edit3 size={16}/></button>
           </div>)}
         </div>
-        {selectedSub&&sub?(sub.foods.length?<div className="food-list">
+        {selectedSub&&sub?<><div className="selected-sub-head"><div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div><span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span></div>{sub.foods.length?<div className="food-list">
           {sub.foods.map(f=><div className="food" key={f.id}>
             <div className="food-icon"><Apple size={19}/></div>
             <div className="food-name"><strong>{f.name}</strong><span>{f.quantity} {f.unit}</span></div>
@@ -437,7 +437,7 @@ function App(){
               </div>}
             </div>
           </div>)}
-        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>):null}
+        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/></div>:null}</>
       </section>:<section>
         <div className="hero">
           <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre tudo em um instante.</h2><p>Organize seus alimentos por onde eles ficam e mantenha tudo sob controle sem complicação.</p></div>
@@ -451,7 +451,7 @@ function App(){
         {search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}>
           <Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/>
         </button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
-          <div className="places">
+          {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
             {places.map(p=><div className="place-card" key={p.id} onClick={()=>openPlace(p.id)}>
               <div className="place-top">
                 <div className="place-icon"><Box size={21}/></div>
