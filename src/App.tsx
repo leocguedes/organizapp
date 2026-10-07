@@ -321,7 +321,7 @@ function App(){
       if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return}
       if(newSub){
         const{subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
-        if(subError.error){setPlaces(snapshot);syncError('Não foi possível criar a subdivisão inicial.');return}
+        if(subError){setPlaces(snapshot);syncError('Não foi possível criar a subdivisão inicial.');return}
       }
     }
     setPlaceModal(false);
@@ -487,7 +487,7 @@ function FoodModal({data,onClose,onSave}:{data?:Food;onClose:()=>void;onSave:(d:
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     <div className="row">
-      <label>Quantidade><div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
+      <label>Quantidade<div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
     </div>
     <button className="primary full" disabled={!name.trim()} onClick={()=>onSave({name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
