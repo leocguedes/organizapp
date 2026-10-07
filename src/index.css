@@ -87,3 +87,31 @@
   .selected-sub-head{padding:11px 13px}
   .sync-status{display:block;width:max-content;margin:5px 0 0}
 }
+
+
+/* Final interaction polish */
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #8eaa92;outline-offset:2px}
+.icon-btn:active,.card-edit:active,.sub-edit:active,.action-trigger:active,.home-add:active,.primary:not(:disabled):active{transform:translateY(0)}
+.place-card:focus-within{border-color:#b7c8b5}
+.search input::placeholder{color:#a1aaa4}
+.food-name strong,.result strong,.place-card h3,.sub-card strong{font-weight:600}
+.qty b{font-size:13px;color:#45564b}
+.qty button{color:#607067;transition:background .14s,border-color .14s,transform .14s}
+.qty button:hover{background:#edf4eb;border-color:#cddbc9;color:#4f7157}
+.number button{color:#607067}
+.modal-head button{width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
+.modal-head button:hover{background:#eef2eb;color:#4f7157}
+.overlay{backdrop-filter:blur(2px)}
+@media(max-width:600px){
+  .overlay{align-items:end;padding:0}
+  .modal{width:100%;max-width:none;border-radius:22px 22px 0 0;padding:18px 17px max(18px,env(safe-area-inset-bottom));box-shadow:0 -16px 45px #23302028;max-height:min(88vh,760px);animation:sheet-in .18s ease-out}
+  .modal-head{margin-bottom:17px}
+  .modal-head h2{font-size:23px}
+  .modal-head:before{content:"";position:absolute;left:50%;top:-9px;width:38px;height:4px;border-radius:99px;background:#d6ded3;transform:translateX(-50%)}
+  .modal label{margin-bottom:13px}
+  .primary.full{min-height:46px}
+}
+@keyframes sheet-in{from{transform:translateY(14px);opacity:.6}to{transform:translateY(0);opacity:1}}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
+}
