@@ -566,7 +566,12 @@ function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onS
 }
 
 function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
-  return <div className="overlay" onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button onClick={onClose} aria-label="Fechar"><X/></button></div>{children}</div></div>
+  useEffect(()=>{
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose()};
+    document.addEventListener('keydown',onKey);
+    return()=>document.removeEventListener('keydown',onKey);
+  },[onClose]);
+  return <div className="overlay" role="dialog" aria-modal="true" aria-label={title} onMouseDown={onClose}><div className="modal" onMouseDown={e=>e.stopPropagation()}><div className="modal-head"><h2>{title}</h2><button onClick={onClose} aria-label="Fechar"><X/></button></div>{children}</div></div>
 }
 
 export default App;
