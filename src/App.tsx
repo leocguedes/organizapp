@@ -16,6 +16,9 @@ type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction
 
 const recentFoodsKey='organizapp-recent-foods';
 const localOwnerKey='organizapp-local-owner';
+const legacyLocalKey='organizapp';
+const anonymousLocalKey='organizapp-anonymous';
+const userLocalKey=(userId:string)=>`organizapp-user-${userId}`;
 const pendingSyncKey='organizapp-pending-sync';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
@@ -47,19 +50,34 @@ function normalize(raw:any):Place[]{
 }
 
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)}
-function readLocalPlaces(){
-  try{return normalize(JSON.parse(localStorage.getItem('organizapp')||'null'))}catch{return initial}
+function readStoredPlaces(key:string):Place[]|null{
+  try{
+    const raw=localStorage.getItem(key);
+    return raw?normalize(JSON.parse(raw)):null;
+  }catch{return null}
 }
 
 function getLocalOwner(){
   try{return localStorage.getItem(localOwnerKey)}catch{return null}
 }
 
-function setLocalOwner(userId:string|null){
-  try{
-    if(userId)localStorage.setItem(localOwnerKey,userId);
-    else localStorage.removeItem(localOwnerKey);
-  }catch{}
+function readLocalPlaces(userId?:string|null){
+  const scoped=readStoredPlaces(userId?userLocalKey(userId):anonymousLocalKey);
+  if(scoped)return scoped;
+  if(!userId&&!getLocalOwner()){
+    const legacy=readStoredPlaces(legacyLocalKey);
+    if(legacy)return legacy;
+  }
+  return initial;
+}
+
+function readAnonymousPlaces(){
+  return readLocalPlaces(null);
+}
+
+function writeLocalPlaces(userId:string|null,places:Place[]){
+  try{localStorage.setItem(userId?userLocalKey(userId):anonymousLocalKey,JSON.stringify(places))}
+  catch{}
 }
 
 async function uploadLocal(userId:string,places:Place[]){
@@ -164,11 +182,12 @@ function mapCloudPlaces(data:any[]):Place[]{
 }
 
 function App(){
-  const[places,setPlaces]=useState<Place[]>(readLocalPlaces);
+  const[places,setPlaces]=useState<Place[]>(()=>readAnonymousPlaces());
   const[recentFoods,setRecentFoods]=useState<RecentFood[]>(()=>{try{const raw=JSON.parse(localStorage.getItem(recentFoodsKey)||'[]');return Array.isArray(raw)?raw.slice(0,8):[]}catch{return[]}});
   const[userId,setUserId]=useState<string|null>(null);
   const[user,setUser]=useState<any>(null);
   const[synced,setSynced]=useState(false);
+  const[cacheReady,setCacheReady]=useState(true);
   const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
@@ -193,46 +212,67 @@ function App(){
       const request=++authRequest.current;
       const{data:session}=await supabase.auth.getSession();
       const current=session.session?.user||null;
-      const local=readLocalPlaces();
+      const anonymousLocal=readAnonymousPlaces();
       if(!active||request!==authRequest.current)return;
       if(!current){
+        setCacheReady(true);
         setUser(null);
         setUserId(null);
         setSynced(false);
-        setPlaces(local);
+        setPlaces(anonymousLocal);
         return;
       }
+      setCacheReady(false);
       setUser(current);
       setUserId(current.id);
+      const accountLocal=readLocalPlaces(current.id);
       const pendingOk=await flushPendingSync(current.id);
+      if(!active||request!==authRequest.current)return;
       if(!pendingOk){
         setSynced(false);
         setAuthMessage('Há alterações aguardando sincronização. Seus dados locais continuam disponíveis.');
-        setPlaces(local);
+        setPlaces(accountLocal);
+        setCacheReady(true);
         return;
       }
       const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
       if(!active||request!==authRequest.current)return;
       if(error){
         setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
-        setPlaces(local);
+        setPlaces(accountLocal);
+        setCacheReady(true);
         return;
       }
       const cloudPlaces=mapCloudPlaces(data||[]);
-      if(cloudPlaces.length===0&&local.length){
+      if(cloudPlaces.length===0&&anonymousLocal.length&&!getLocalOwner()){
         try{
-          await uploadLocal(current.id,local);
-          if(active&&request===authRequest.current)setPlaces(local);
+          await uploadLocal(current.id,anonymousLocal);
+          if(active&&request===authRequest.current){
+            setPlaces(anonymousLocal);
+            writeLocalPlaces(current.id,anonymousLocal);
+          }
         }catch{
-          if(active&&request===authRequest.current)setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
+          if(active&&request===authRequest.current){
+            setPlaces(anonymousLocal);
+            setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
+          }
         }
-      }else if(active&&request===authRequest.current)setPlaces(cloudPlaces);
-      if(active&&request===authRequest.current)setSynced(true);
+      }else if(active&&request===authRequest.current){
+        setPlaces(cloudPlaces);
+        writeLocalPlaces(current.id,cloudPlaces);
+      }
+      if(active&&request===authRequest.current){
+        setSynced(true);
+        setCacheReady(true);
+      }
     };
     load();
     const{data:listener}=supabase.auth.onAuthStateChange((event,session)=>{
       if(!active)return;
-      if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED')++authRequest.current;
+      if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED'){
+        ++authRequest.current;
+        if(event==='SIGNED_IN'&&session?.user)setCacheReady(false);
+      }
       if(event==='PASSWORD_RECOVERY'){
         setPasswordRecovery(true);
         setAuthMessage(null);
@@ -241,7 +281,8 @@ function App(){
         setUser(null);
         setUserId(null);
         setSynced(false);
-        setPlaces(readLocalPlaces());
+        setCacheReady(true);
+        setPlaces(readAnonymousPlaces());
         return;
       }
       setUser(session.user);
@@ -250,7 +291,10 @@ function App(){
     return()=>{active=false;listener.subscription.unsubscribe()};
   },[]);
 
-  useEffect(()=>{localStorage.setItem('organizapp',JSON.stringify(places))},[places]);
+  useEffect(()=>{
+    if(!cacheReady)return;
+    writeLocalPlaces(userId,places);
+  },[cacheReady,userId,places]);
 
   useEffect(()=>{
     const updateOnline=()=>setOnline(navigator.onLine);
@@ -330,7 +374,7 @@ function App(){
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
-    const local=readLocalPlaces();
+    const local=readAnonymousPlaces();
     try{
       if(mode==='signup'){
         const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});
@@ -358,17 +402,24 @@ function App(){
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
         if(error){setAuthMessage(error.message);return}
         if(data.user){
+          setCacheReady(false);
           setLocalOwner(data.user.id);
+          setPlaces(readLocalPlaces(data.user.id));
         }
         const request=++authRequest.current;
         const{data:cloudData, error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
         if(request===authRequest.current){
           if(cloudError){
             setSynced(false);
+            if(data.user)setPlaces(readLocalPlaces(data.user.id));
+            setCacheReady(true);
             setAuthMessage('Login realizado, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
           }else{
-            setPlaces(mapCloudPlaces(cloudData||[]));
+            const cloudPlaces=mapCloudPlaces(cloudData||[]);
+            setPlaces(cloudPlaces);
+            if(data.user)writeLocalPlaces(data.user.id,cloudPlaces);
             setSynced(true);
+            setCacheReady(true);
             setAuthMessage('Login realizado. Seus dados estão sincronizados.');
           }
         }
@@ -394,6 +445,8 @@ function App(){
       const{error}=await supabase.auth.signOut();
       if(error){setAuthMessage('Não foi possível sair da conta agora.');return}
       setLocalOwner(user?.id||null);
+      setCacheReady(true);
+      setPlaces(readAnonymousPlaces());
       setUser(null);
       setUserId(null);
       setSynced(false);
