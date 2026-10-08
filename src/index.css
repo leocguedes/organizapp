@@ -128,3 +128,36 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .food.out-of-stock .qty b{color:#9a8f80}
 .food.out-of-stock .qty button{background:#f5f1eb;border-color:#e5ded4}
 .food.out-of-stock .qty button:hover{background:#eee8df;border-color:#d9d0c3;color:#756b5f}
+
+/* Home refinement */
+.hero{margin-bottom:24px}
+.hero-copy{max-width:720px}
+.hero-copy p:not(.eyebrow){font-size:14px;line-height:1.55;max-width:600px}
+.home-tools{margin-bottom:34px}
+.home-tools .search{margin-bottom:12px;height:54px;border-radius:16px;box-shadow:0 3px 12px #2b3a280b}
+.home-tools .search input{font-size:15px}
+.home-tools .search>svg{color:#708077}
+.home-tools .home-add{margin:0}
+.section-title{margin-top:0;margin-bottom:13px;align-items:flex-end}
+.section-title h3{font-size:18px;letter-spacing:-.01em}
+.section-caption{margin:4px 0 0;color:#8a958e;font-size:11px}
+.places{gap:14px}
+.place-card{min-height:154px;padding:18px;background:#fffefa}
+.place-card h3{margin-top:20px}
+.search-results-head{margin:2px 0 13px}
+.search-results-head .eyebrow{margin-bottom:4px}
+.search-results-head h3{margin:0;font-size:18px;color:#3e4f44}
+.search-results-head+.results{margin-top:0}
+@media(max-width:700px){
+  .hero{margin-bottom:20px}
+  .hero-copy p:not(.eyebrow){font-size:13px}
+  .home-tools{margin-bottom:28px}
+}
+@media(max-width:460px){
+  .hero h2{font-size:31px}
+  .home-tools .search{height:52px}
+  .section-title{align-items:center}
+  .section-title button{font-size:12px}
+  .section-caption{font-size:10px}
+  .place-card{min-height:145px}
+}
