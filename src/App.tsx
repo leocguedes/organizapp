@@ -41,6 +41,9 @@ function normalize(raw:any):Place[]{
 }
 
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v)}
+function readLocalPlaces(){
+  try{return normalize(JSON.parse(localStorage.getItem('organizapp')||'null'))}catch{return initial}
+}
 
 async function uploadLocal(userId:string,places:Place[]){
   for(const p of places){
@@ -75,7 +78,7 @@ function mapCloudPlaces(data:any[]):Place[]{
 }
 
 function App(){
-  const[places,setPlaces]=useState<Place[]>(()=>normalize(JSON.parse(localStorage.getItem('organizapp')||'null')));
+  const[places,setPlaces]=useState<Place[]>(readLocalPlaces);
   const[recentFoods,setRecentFoods]=useState<RecentFood[]>(()=>{try{const raw=JSON.parse(localStorage.getItem(recentFoodsKey)||'[]');return Array.isArray(raw)?raw.slice(0,8):[]}catch{return[]}});
   const[userId,setUserId]=useState<string|null>(null);
   const[user,setUser]=useState<any>(null);
@@ -100,7 +103,7 @@ function App(){
     const load=async()=>{
       const{data:session}=await supabase.auth.getSession();
       const current= session.session?.user||null;
-      const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));
+      const local=readLocalPlaces();
       if(!active)return;
       if(!current){
         setUser(null);
@@ -444,7 +447,7 @@ function App(){
           <div className="total"><span>{total}</span><small>{total===1?'alimento':'alimentos'}</small><em>{places.length} {places.length===1?'local':'locais'}</em></div>
         </div>
         <div className="search">
-          <Search size={19}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
+          <Search size={19}/><input aria-label="Buscar alimento" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
           {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
         </div>
         {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
