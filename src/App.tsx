@@ -491,7 +491,7 @@ function App(){
       </div>
       <div className="header-actions">
         <button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>
-          {user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}
+          <span className="auth-label">{user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}</span><span className="auth-short">{user&&!user.is_anonymous?'Sair':'Entrar'}</span>
         </button>
         <button className="icon-btn" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}} title="Gerenciar locais"><Settings size={20}/></button>
       </div>
