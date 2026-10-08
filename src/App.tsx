@@ -13,6 +13,7 @@ const units:Unit[]=['unidades','pacotes','latas','garrafas','kg','g','L','ml'];
 const recentFoodsKey='organizapp-recent-foods';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
+const searchKey=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
 const initial:Place[]=[
   {id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},
@@ -235,9 +236,9 @@ function App(){
   const sub=current?.subdivisions.find(s=>s.id===selectedSub);
   const total=places.reduce((n,p)=>n+p.subdivisions.reduce((m,s)=>m+s.foods.length,0),0);
   const results=useMemo(()=>{
-    const q=search.trim().toLowerCase();
+    const q=searchKey(search.trim());
     if(!q)return[];
-    return places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>f.name.toLowerCase().includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))));
+    return places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>searchKey(f.name).includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))));
   },[search,places]);
 
   async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){
