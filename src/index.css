@@ -161,3 +161,37 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   .section-caption{font-size:10px}
   .place-card{min-height:145px}
 }
+
+/* Location screen hierarchy */
+.location-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:20px 0 26px;border-bottom:1px solid #e1e8df}
+.location-identity{display:flex;align-items:center;gap:14px;min-width:0}
+.location-icon{width:50px;height:50px;border-radius:15px;background:#e7efe4;color:#56745d;display:grid;place-items:center;flex:0 0 auto}
+.location-identity h2{font-size:32px;margin:0 0 5px}
+.location-identity p:last-child{margin:0;color:#849087;font-size:12px}
+.location-add{flex:0 0 auto}
+.sub-head{margin-top:26px;margin-bottom:12px;align-items:flex-end}
+.sub-head>div{min-width:0}
+.sub-head h3{font-size:18px}
+.sub-head p{margin:4px 0 0;color:#8a958e;font-size:11px;line-height:1.4}
+.sub-list{gap:9px;margin-bottom:27px}
+.sub-card{min-height:64px}
+.sub-select{padding:13px 9px 13px 15px}
+.sub-card.active{box-shadow:inset 3px 0 0 #628068}
+.selected-sub-head{margin-top:2px}
+@media(max-width:600px){
+  .location-hero{display:block;padding:16px 0 20px}
+  .location-identity{gap:12px}
+  .location-icon{width:46px;height:46px;border-radius:14px}
+  .location-identity h2{font-size:28px}
+  .location-add{width:100%;margin-top:16px;min-height:44px}
+  .sub-head{margin-top:22px;align-items:center}
+  .sub-head p{max-width:245px}
+  .sub-head button{font-size:12px;white-space:nowrap}
+}
+@media(max-width:460px){
+  .location-identity h2{font-size:26px}
+  .location-icon{width:43px;height:43px}
+  .sub-head h3{font-size:17px}
+  .sub-list{gap:7px}
+  .sub-card{min-height:60px}
+}
