@@ -1,0 +1,3 @@
+{
+  "name":"OrganizaApp","short_name":"OrganizaApp","description":"Organize seus alimentos por local e encontre tudo em segundos.","start_url":"/organizapp/","scope":"/organizapp/","display":"standalone","background_color":"#f5f7f2","theme_color":"#f5f7f2","lang":"pt-BR","icons":[{"src":"/organizapp/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
