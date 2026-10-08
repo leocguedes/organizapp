@@ -497,7 +497,7 @@ function App(){
       </div>
     </header>
     <main>
-      {authMessage&&<div className="auth-note">{authMessage}</div>}
+      {authMessage&&<div className="auth-note" role="status" aria-live="polite">{authMessage}</div>}
       {selected?<section>
         <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
         <div className="location-hero">
@@ -563,7 +563,7 @@ function App(){
           </button>)}
         </div>:<div className="search-empty"><Search size={24}/><h3>Nenhum alimento encontrado</h3><p>Tente outro nome ou limpe a busca para ver seus locais.</p><button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button></div>}</>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
           {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
-            {places.map(p=><div className="place-card" key={p.id} role="button" tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}>
+            {places.map(p=><div className="place-card" key={p.id} role="button" aria-label={'Abrir '+p.name} tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}>
               <div className="place-top">
                 <div className="place-icon"><Box size={21}/></div>
                 <div className="place-card-actions">
@@ -584,7 +584,7 @@ function App(){
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
     {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
     {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
-    {undo&&<div className="undo-toast"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
+    {undo&&<div className="undo-toast" role="status" aria-live="polite"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
   </div>
 }
 
@@ -676,7 +676,7 @@ function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place
   const[name,setName]=useState(initialEdit?.name||'');
   const[edit,setEdit]=useState<Place|null>(initialEdit);
   return <Modal title={edit?'Editar local':'Gerenciar locais'} onClose={onClose}>
-    {!edit&&<><p className="modal-help">Cada local pode ter suas próprias subdivisões.</p><div className="manage-list">{places.map(p=><div key={p.id}><span><strong>{p.name}</strong><small>{p.subdivisions.length} subdivisões</small></span><div><button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name}><Edit3 size={16}/></button><button className="danger" onClick={()=>onDelete(p.id)} title={'Excluir '+p.name}><Trash2 size={16}/></button></div></div>)}</div></>}
+    {!edit&&<><p className="modal-help">Cada local pode ter suas próprias subdivisões.</p><div className="manage-list">{places.map(p=><div key={p.id}><span><strong>{p.name}</strong><small>{p.subdivisions.length} subdivisões</small></span><div><button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name} aria-label={'Renomear '+p.name}><Edit3 size={16}/></button><button className="danger" onClick={()=>onDelete(p.id)} title={'Excluir '+p.name} aria-label={'Excluir '+p.name}><Trash2 size={16}/></button></div></div>)}</div></>}
     {edit&&<button className="back modal-back" onClick={()=>{setEdit(null);setName('')}}>← Voltar aos locais</button>}
     <label>{edit?'Nome do local':'Novo local'}<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Geladeira"/></label>
     <button className="primary full" disabled={!name.trim()} onClick={()=>{onSave(name,edit?.id);setEdit(null);setName('')}}>{edit?'Salvar alterações':'Criar local'}</button>
