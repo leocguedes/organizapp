@@ -1,5 +1,5 @@
 import{describe,expect,it}from'vitest';
-import{formatQuantity,quantityStep,searchKey}from'../src/lib/domain';
+import{formatQuantity,quantityStep,searchKey}from'./domain';
 
 describe('OrganizaApp domain helpers',()=>{
   it('searches without case or accent sensitivity',()=>{
