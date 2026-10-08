@@ -98,14 +98,16 @@ function App(){
   const[subModal,setSubModal]=useState<{place:string;sub?:Sub}|null>(null);
   const[undo,setUndo]=useState<UndoState|null>(null);
   const undoTimer=useRef<number|null>(null);
+  const authRequest=useRef(0);
 
   useEffect(()=>{
     let active=true;
     const load=async()=>{
+      const request=++authRequest.current;
       const{data:session}=await supabase.auth.getSession();
-      const current= session.session?.user||null;
+      const current=session.session?.user||null;
       const local=readLocalPlaces();
-      if(!active)return;
+      if(!active||request!==authRequest.current)return;
       if(!current){
         setUser(null);
         setUserId(null);
@@ -116,6 +118,7 @@ function App(){
       setUser(current);
       setUserId(current.id);
       const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+      if(!active||request!==authRequest.current)return;
       if(error){
         setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
         setPlaces(local);
@@ -125,26 +128,34 @@ function App(){
       if(cloudPlaces.length===0&&local.length){
         try{
           await uploadLocal(current.id,local);
-          if(active)setPlaces(local);
+          if(active&&request===authRequest.current)setPlaces(local);
         }catch{
-          if(active)setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
+          if(active&&request===authRequest.current)setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
         }
-      }else if(active)setPlaces(cloudPlaces);
-      if(active)setSynced(true);
+      }else if(active&&request===authRequest.current)setPlaces(cloudPlaces);
+      if(active&&request===authRequest.current)setSynced(true);
     };
     load();
     const{data:listener}=supabase.auth.onAuthStateChange(async(_event,session)=>{
       if(!active)return;
+      const request=++authRequest.current;
       if(!session?.user){
         setUser(null);
         setUserId(null);
         setSynced(false);
+        setPlaces(readLocalPlaces());
         return;
       }
       setUser(session.user);
       setUserId(session.user.id);
-      const{data}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
-      if(active&&data)setPlaces(mapCloudPlaces(data));
+      const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+      if(!active||request!==authRequest.current)return;
+      if(error){
+        setSynced(false);
+        setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
+        return;
+      }
+      setPlaces(mapCloudPlaces(data||[]));
       setSynced(true);
     });
     return()=>{active=false;listener.subscription.unsubscribe()};
@@ -154,8 +165,8 @@ function App(){
 
   function rememberFood(name:string,unit:Unit){
     setRecentFoods(prev=>{
-      const key=name.trim().toLowerCase();
-      const next=[{name:name.trim(),unit},...prev.filter(f=>f.name.trim().toLowerCase()!==key)].slice(0,8);
+      const key=searchKey(name.trim());
+      const next=[{name:name.trim(),unit},...prev.filter(f=>searchKey(f.name.trim())!==key)].slice(0,8);
       localStorage.setItem(recentFoodsKey,JSON.stringify(next));
       return next;
     });
@@ -190,7 +201,7 @@ function App(){
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
-    const local=normalize(JSON.parse(localStorage.getItem('organizapp')||'null'));
+    const local=readLocalPlaces();
     try{
       if(mode==='signup'){
         const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});
@@ -286,10 +297,13 @@ function App(){
     });
   }
 
+  const quantityStep=(unit:Unit)=>unit==='kg'||unit==='L'?0.1:1;
+
   async function changeQty(placeId:string,subId:string,id:string,delta:number){
     const food=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===id);
     if(!food)return;
-    const nextQty=Math.max(0,food.quantity+delta);
+    const step=quantityStep(food.unit);
+    const nextQty=Math.max(0,Number((food.quantity+(delta*step)).toFixed(3)));
     if(nextQty===food.quantity)return;
     const snapshot=places;
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>f.id===id?{...f,quantity:nextQty}:f)})});
@@ -398,6 +412,12 @@ function App(){
     setSelectedSub(p?.subdivisions[0]?.id||null);
   }
 
+  function openSearchResult(placeId:string,subId:string){
+    setSearch('');
+    setSelected(placeId);
+    setSelectedSub(subId);
+  }
+
   function openAddFoodFromHome(){ if(!places.length){setPlaceToEdit(null);setPlaceModal(true);return;} setFoodModal({place:'',sub:''}); }
 
   return <div className="app">
@@ -444,10 +464,11 @@ function App(){
         {selectedSub&&sub?<><div className="selected-sub-head"><div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div><span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span></div>{sub.foods.length?<div className="food-list">
           {sub.foods.map(f=><div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
             <div className="food-icon"><Apple size={19}/></div>
-            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity===0?'Sem estoque':f.quantity+' '+f.unit}</span></div>
+            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span></div>
             <div className="qty">
               <button onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
               <b>{f.quantity}</b>
+              <span className="qty-unit" aria-hidden="true">{f.unit}</span>
               <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}><Plus size={15}/></button>
             </div>
             <div className="food-actions">
@@ -459,7 +480,7 @@ function App(){
               </div>}
             </div>
           </div>)}
-        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/></div>:null}</>
+        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>}</>:null}</>
       </section>:<section>
         <div className="hero">
           <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre o que precisa.</h2><p>Veja onde cada alimento está e mantenha sua casa organizada sem esforço.</p></div>
@@ -471,9 +492,15 @@ function App(){
           </div>
           {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
         </div>
-        {search?<div className="search-results-head"><div><p className="eyebrow">RESULTADOS</p><h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3></div></div>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
+        {search?<><div className="search-results-head"><div><p className="eyebrow">RESULTADOS</p><h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3></div></div>{results.length?<div className="results">
+          {results.map(r=><button className="result" key={r.id} onClick={()=>openSearchResult(r.placeId,r.subId)}>
+            <Apple size={18}/>
+            <span><strong>{r.name}</strong><small>{r.quantity===0?'Sem estoque':r.quantity+' '+r.unit} · {r.place} · {r.sub}</small></span>
+            <ChevronRight size={17}/>
+          </button>)}
+        </div>:<div className="search-empty"><Search size={24}/><h3>Nenhum alimento encontrado</h3><p>Tente outro nome ou limpe a busca para ver seus locais.</p><button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button></div>}</>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
           {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
-            {places.map(p=><div className="place-card" key={p.id} onClick={()=>openPlace(p.id)}>
+            {places.map(p=><div className="place-card" key={p.id} role="button" tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' ')openPlace(p.id)}}>
               <div className="place-top">
                 <div className="place-icon"><Box size={21}/></div>
                 <div className="place-card-actions">
@@ -488,7 +515,7 @@ function App(){
         </>}
       </section>}
     </main>
-    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)}/>}
+    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)} onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}/>
     {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
     {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={removePlace}/>}
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
@@ -517,7 +544,7 @@ function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
 
 function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddToExisting}:{data?:Food;placeId:string;subId:string;places:Place[];recentFoods:RecentFood[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void;onAddToExisting:(placeId:string,subId:string,existingId:string,amount:number,unit:Unit)=>void}){
   const[name,setName]=useState(data?.name||'');
-  const[quantity,setQuantity]=useState(data?.quantity||1);
+  const[quantity,setQuantity]=useState(data?.quantity ?? 1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
   const[chosenPlace,setChosenPlace]=useState(placeId);
   const[chosenSub,setChosenSub]=useState(subId);
