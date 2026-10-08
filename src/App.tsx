@@ -88,6 +88,7 @@ function App(){
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
   const[authModal,setAuthModal]=useState(false);
+  const[passwordRecovery,setPasswordRecovery]=useState(false);
   const[selected,setSelected]=useState<string|null>(null);
   const[selectedSub,setSelectedSub]=useState<string|null>(null);
   const[search,setSearch]=useState('');
@@ -140,6 +141,10 @@ function App(){
     const{data:listener}=supabase.auth.onAuthStateChange((event,session)=>{
       if(!active)return;
       if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED')++authRequest.current;
+      if(event==='PASSWORD_RECOVERY'){
+        setPasswordRecovery(true);
+        setAuthMessage(null);
+      }
       if(!session?.user){
         setUser(null);
         setUserId(null);
@@ -258,6 +263,17 @@ function App(){
     setUserId(null);
     setSynced(false);
     setAuthMessage(null);
+  }
+
+  async function updatePassword(password:string){
+    setAuthBusy(true);
+    setAuthMessage(null);
+    try{
+      const{error}=await supabase.auth.updateUser({password});
+      if(error){setAuthMessage(error.message);return}
+      setPasswordRecovery(false);
+      setAuthMessage('Senha atualizada com sucesso.');
+    }finally{setAuthBusy(false)}
   }
 
   const current=places.find(p=>p.id===selected);
@@ -567,8 +583,22 @@ function App(){
     {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
     {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+    {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
     {undo&&<div className="undo-toast"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
   </div>
+}
+
+function PasswordRecoveryModal({busy,onClose,onSubmit}:{busy:boolean;onClose:()=>void;onSubmit:(password:string)=>void}){
+  const[password,setPassword]=useState('');
+  const[confirm,setConfirm]=useState('');
+  const canSave=password.length>=6&&password===confirm;
+  return <Modal title="Criar nova senha" onClose={onClose}>
+    <p className="modal-help">Escolha uma nova senha para continuar usando sua conta.</p>
+    <label>Nova senha<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" autoComplete="new-password"/></label>
+    <label>Confirmar senha<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Digite a senha novamente" autoComplete="new-password"/></label>
+    {confirm&&password!==confirm&&<p className="password-mismatch">As senhas não coincidem.</p>}
+    <button className="primary full" disabled={busy||!canSave} onClick={()=>onSubmit(password)}>{busy?'Aguarde...':'Salvar nova senha'}</button>
+  </Modal>
 }
 
 function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>void;onSubmit:(mode:'signin'|'signup',email:string,password:string)=>void;onReset:(email:string)=>void}){
