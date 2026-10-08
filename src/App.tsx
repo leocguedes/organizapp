@@ -390,7 +390,7 @@ function App(){
     setFoodMenu(null);
     offerUndo('Alimento removido',()=>{
       setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.some(f=>f.id===removed.id)?s.foods:[...s.foods,removed]})}));
-      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}).catch(()=>syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.'));
+      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}).then(({error})=>{if(error)syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.')});
     });
   }
 
@@ -532,7 +532,7 @@ function App(){
         next.splice(Math.min(Math.max(index,0),next.length),0,removed);
         return{...p,subdivisions:next};
       }));
-      if(userId)supabase.from('subdivisions').upsert({id:removed.id,user_id:userId,location_id:placeId,name:removed.name}).catch(()=>syncError('A divisão foi restaurada neste dispositivo, mas a sincronização falhou.'));
+      if(userId)supabase.from('subdivisions').upsert({id:removed.id,user_id:userId,location_id:placeId,name:removed.name}).then(({error})=>{if(error)syncError('A divisão foi restaurada neste dispositivo, mas a sincronização falhou.')});
     });
   }
 
