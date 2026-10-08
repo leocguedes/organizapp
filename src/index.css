@@ -253,3 +253,11 @@ html{background:#f5f7f2}
 body{min-height:100dvh;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-tap-highlight-color:transparent}
 button,input,select{-webkit-tap-highlight-color:transparent}
 header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+
+.no-subdivisions{display:flex;align-items:center;gap:12px;margin:0 0 27px;padding:15px;border:1px dashed #d2ddd0;background:#fffdf9;border-radius:15px}
+.no-subdivisions-icon{width:40px;height:40px;border-radius:12px;background:#eaf1e7;color:#5d7a63;display:grid;place-items:center;flex:0 0 auto}
+.no-subdivisions>div:nth-child(2){min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.no-subdivisions strong{font-size:13px;color:#4a5b50}
+.no-subdivisions span{font-size:11px;line-height:1.4;color:#8a958e}
+.no-subdivisions .primary{white-space:nowrap}
+@media(max-width:460px){.no-subdivisions{align-items:flex-start}.no-subdivisions .primary{font-size:11px;padding:9px 10px}}
