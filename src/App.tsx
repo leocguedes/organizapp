@@ -10,9 +10,13 @@ type Food={id:string;name:string;quantity:number;unit:Unit};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type UndoState={label:string;action:()=>void};
+type SyncTable='locations'|'subdivisions'|'foods';
+type SyncAction='upsert'|'update'|'delete';
+type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
 const recentFoodsKey='organizapp-recent-foods';
 const localOwnerKey='organizapp-local-owner';
+const pendingSyncKey='organizapp-pending-sync';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
@@ -70,6 +74,75 @@ async function uploadLocal(userId:string,places:Place[]){
         if(foodError)throw foodError;
       }
     }
+  }
+}
+
+function readPendingSync():PendingOperation[]{
+  try{
+    const raw=JSON.parse(localStorage.getItem(pendingSyncKey)||'[]');
+    return Array.isArray(raw)?raw:[];
+  }catch{return[]}
+}
+
+function writePendingSync(queue:PendingOperation[]){
+  try{
+    if(queue.length)localStorage.setItem(pendingSyncKey,JSON.stringify(queue));
+    else localStorage.removeItem(pendingSyncKey);
+  }catch{}
+}
+
+function operationKey(op:PendingOperation){
+  return op.table+':'+op.action+':'+(op.rowId||String(op.data?.id||''));
+}
+
+function queuePendingSync(operation:Omit<PendingOperation,'id'>){
+  const queue=readPendingSync();
+  const next=queue.filter(op=>!(op.userId===operation.userId&&operationKey(op)===operationKey({...operation,id:''})));
+  next.push({...operation,id:uid()});
+  writePendingSync(next);
+}
+
+async function applyPendingSync(op:PendingOperation){
+  if(op.action==='upsert'){
+    const{error}=await supabase.from(op.table).upsert(op.data||{});
+    if(error)throw error;
+    return;
+  }
+  if(op.action==='update'){
+    const{error}=await supabase.from(op.table).update(op.data||{}).eq('id',op.rowId||'');
+    if(error)throw error;
+    return;
+  }
+  const{error}=await supabase.from(op.table).delete().eq('id',op.rowId||'');
+  if(error)throw error;
+}
+
+async function flushPendingSync(userId:string){
+  let queue=readPendingSync();
+  const mine=queue.filter(op=>op.userId===userId);
+  for(const op of mine){
+    try{
+      await applyPendingSync(op);
+      queue=queue.filter(item=>item.id!==op.id);
+      writePendingSync(queue);
+    }catch{
+      return false;
+    }
+  }
+  return true;
+}
+
+async function writeOrQueue(userId:string,operation:Omit<PendingOperation,'id'>){
+  if(!navigator.onLine){
+    queuePendingSync(operation);
+    return false;
+  }
+  try{
+    await applyPendingSync({...operation,id:uid()});
+    return true;
+  }catch{
+    queuePendingSync(operation);
+    return false;
   }
 }
 
@@ -131,6 +204,13 @@ function App(){
       }
       setUser(current);
       setUserId(current.id);
+      const pendingOk=await flushPendingSync(current.id);
+      if(!pendingOk){
+        setSynced(false);
+        setAuthMessage('Há alterações aguardando sincronização. Seus dados locais continuam disponíveis.');
+        setPlaces(local);
+        return;
+      }
       const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
       if(!active||request!==authRequest.current)return;
       if(error){
@@ -187,6 +267,8 @@ function App(){
 
   async function refreshCloud(userIdToLoad=userId){
     if(!userIdToLoad)return;
+    const pendingOk=await flushPendingSync(userIdToLoad);
+    if(!pendingOk){setSynced(false);return}
     const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
     if(error){
       setSynced(false);
@@ -355,8 +437,8 @@ function App(){
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:id?s.foods.map(f=>f.id===id?food:f):[...s.foods,food]})});
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('foods').upsert({id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit});
-      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o alimento.');return}
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:food.id,data:{id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit}});
+      if(!ok)syncError('Alimento salvo neste dispositivo. Ele será sincronizado quando a conexão voltar.');
     }
     rememberFood(food.name,food.unit);
     setFoodModal(null);
@@ -370,8 +452,8 @@ function App(){
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>f.id===existingId?{...f,quantity:nextQty}:f)})});
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('foods').update({quantity:nextQty}).eq('id',existingId);
-      if(error){setPlaces(snapshot);syncError('Não foi possível somar a quantidade.');return}
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:existingId,data:{quantity:nextQty}});
+      if(!ok)syncError('Quantidade salva neste dispositivo. Ela será sincronizada quando a conexão voltar.');
     }
     setFoodModal(null);
     setAuthMessage(null);
@@ -384,13 +466,13 @@ function App(){
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.filter(f=>f.id!==id)})});
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('foods').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o alimento.');return}
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'delete',rowId:id});
+      if(!ok)syncError('Alimento removido neste dispositivo. A exclusão será sincronizada quando a conexão voltar.');
     }
     setFoodMenu(null);
     offerUndo('Alimento removido',()=>{
       setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.some(f=>f.id===removed.id)?s.foods:[...s.foods,removed]})}));
-      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}).then(({error})=>{if(error)syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.')});
+      if(userId)void writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:removed.id,data:{id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}}).then(ok=>{if(!ok)syncError('O alimento foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.')});
     });
   }
 
@@ -404,8 +486,8 @@ function App(){
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>f.id===id?{...f,quantity:nextQty}:f)})});
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('foods').update({quantity:nextQty}).eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível atualizar a quantidade.');}
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:id,data:{quantity:nextQty}});
+      if(!ok)syncError('Quantidade salva neste dispositivo. Ela será sincronizada quando a conexão voltar.');
     }
   }
 
@@ -430,8 +512,8 @@ function App(){
     setPlaces(next);
     setMoveModal(null);
     if(userId){
-      const{error}=await supabase.from('foods').update({subdivision_id:toSubId}).eq('id',foodId);
-      if(error){setPlaces(snapshot);syncError('Não foi possível mover o alimento.');return}
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:foodId,data:{subdivision_id:toSubId}});
+      if(!ok)syncError('Alimento movido neste dispositivo. A mudança será sincronizada quando a conexão voltar.');
     }
     const destinationPlace=places.find(p=>p.id===toPlaceId);
     const destinationSub=destinationPlace?.subdivisions.find(s=>s.id===toSubId);
@@ -441,7 +523,7 @@ function App(){
         if(p.id===fromPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:s.foods.some(f=>f.id===foodId)?s.foods:[...s.foods,food]}:s)};
         return p;
       }));
-      if(userId)supabase.from('foods').update({subdivision_id:fromSubId}).eq('id',foodId).then(({error})=>{if(error)syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.')});
+      if(userId)void writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:foodId,data:{subdivision_id:fromSubId}}).then(ok=>{if(!ok)syncError('O alimento foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.')});
     });
     setFoodMenu(null);
     if(destinationPlace&&destinationSub)setAuthMessage(null);
@@ -458,16 +540,11 @@ function App(){
     const next=id?places.map(p=>p.id===id?{...p,name:clean}:p):[...places,{id:placeId,name:clean,subdivisions:[newSub!]}];
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('locations').upsert({id:placeId,user_id:userId,name:clean});
-      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return false}
+      const locationOk=await writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:placeId,data:{id:placeId,user_id:userId,name:clean}});
+      if(!locationOk)syncError('Local salvo neste dispositivo. Ele será sincronizado quando a conexão voltar.');
       if(newSub){
-        const{error:subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
-        if(subError){
-          await supabase.from('locations').delete().eq('id',placeId);
-          setPlaces(snapshot);
-          syncError('Não foi possível criar a subdivisão inicial.');
-          return false;
-        }
+        const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:newSub.id,data:{id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name}});
+        if(!subOk)syncError('Local salvo neste dispositivo. A divisão inicial será sincronizada quando a conexão voltar.');
       }
     }
     setPlaceModal(false);
@@ -482,8 +559,8 @@ function App(){
     const index=places.findIndex(p=>p.id===id);
     setPlaces(ps=>ps.filter(p=>p.id!==id));
     if(userId){
-      const{error}=await supabase.from('locations').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');return false}
+      const ok=await writeOrQueue(userId,{userId,table:'locations',action:'delete',rowId:id});
+      if(!ok)syncError('Local removido neste dispositivo. A exclusão será sincronizada quando a conexão voltar.');
     }
     if(selected===id){setSelected(null);setSelectedSub(null)}
     offerUndo('Local removido',()=>{
@@ -493,7 +570,18 @@ function App(){
         next.splice(Math.min(index,next.length),0,removed);
         return next;
       });
-      if(userId)uploadLocal(userId,[removed]).catch(()=>syncError('O local foi restaurado neste dispositivo, mas a sincronização falhou.'));
+      if(userId){
+        for(const p of [removed]){
+          void writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:p.id,data:{id:p.id,user_id:userId,name:p.name}}).then(async ok=>{
+            if(!ok){syncError('O local foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.');return}
+            for(const s of p.subdivisions){
+              const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:s.id,data:{id:s.id,user_id:userId,location_id:p.id,name:s.name}});
+              if(!subOk)return;
+              for(const f of s.foods)await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:f.id,data:{id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit}});
+            }
+          });
+        }
+      }
     });
     return true;
   }
@@ -510,8 +598,8 @@ function App(){
     const next=id?places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id===id?{...s,name:clean}:s)}):places.map(p=>p.id===placeId?{...p,subdivisions:[...p.subdivisions,{id:subId,name:clean,foods:[]}]}:p);
     setPlaces(next);
     if(userId){
-      const{error}=await supabase.from('subdivisions').upsert({id:subId,user_id:userId,location_id:placeId,name:clean});
-      if(error){setPlaces(snapshot);syncError('Não foi possível salvar a subdivisão.');return false}
+      const ok=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:subId,data:{id:subId,user_id:userId,location_id:placeId,name:clean}});
+      if(!ok)syncError('Divisão salva neste dispositivo. Ela será sincronizada quando a conexão voltar.');
     }
     setSubModal(null);
     return true;
@@ -524,8 +612,8 @@ function App(){
     const index=places.find(p=>p.id===placeId)?.subdivisions.findIndex(s=>s.id===id)??-1;
     setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.filter(s=>s.id!==id)}));
     if(userId){
-      const{error}=await supabase.from('subdivisions').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir a subdivisão.');return false}
+      const ok=await writeOrQueue(userId,{userId,table:'subdivisions',action:'delete',rowId:id});
+      if(!ok)syncError('Divisão removida neste dispositivo. A exclusão será sincronizada quando a conexão voltar.');
     }
     if(selectedSub===id)setSelectedSub(null);
     offerUndo('Divisão removida',()=>{
@@ -535,7 +623,7 @@ function App(){
         next.splice(Math.min(Math.max(index,0),next.length),0,removed);
         return{...p,subdivisions:next};
       }));
-      if(userId)supabase.from('subdivisions').upsert({id:removed.id,user_id:userId,location_id:placeId,name:removed.name}).then(({error})=>{if(error)syncError('A divisão foi restaurada neste dispositivo, mas a sincronização falhou.')});
+      if(userId)void writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:removed.id,data:{id:removed.id,user_id:userId,location_id:placeId,name:removed.name}}).then(ok=>{if(!ok)syncError('A divisão foi restaurada neste dispositivo e será sincronizada quando a conexão voltar.')});
     });
     return true;
   }
