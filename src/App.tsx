@@ -468,7 +468,7 @@ function App(){
             <div className="qty">
               <button onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
               <b>{f.quantity}</b>
-              <span className="qty-unit" aria-hidden="true">{f.unit}</span>
+              {f.unit!=='unidades'&&<span className="qty-unit" aria-hidden="true">{f.unit}</span>}
               <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}><Plus size={15}/></button>
             </div>
             <div className="food-actions">
