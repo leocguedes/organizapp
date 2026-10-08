@@ -592,7 +592,7 @@ function App(){
         </>}
       </section>}
     </main>
-    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)} onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}/>
+    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)} onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}/>} 
     {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
     {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
