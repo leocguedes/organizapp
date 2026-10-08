@@ -1,21 +1,20 @@
 import{useEffect,useMemo,useRef,useState}from'react';
 import type{ReactNode}from'react';
+import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
+import type{Unit}from'./lib/domain';
 import{Apple,Box,ChevronRight,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
-type Unit='unidades'|'pacotes'|'latas'|'garrafas'|'kg'|'g'|'L'|'ml';
 type RecentFood={name:string;unit:Unit};
 type Food={id:string;name:string;quantity:number;unit:Unit};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type UndoState={label:string;action:()=>void};
 
-const units:Unit[]=['unidades','pacotes','latas','garrafas','kg','g','L','ml'];
 const recentFoodsKey='organizapp-recent-foods';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const searchKey=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-const formatQuantity=(quantity:number,unit:Unit)=>unit==='unidades'?quantity+' '+(quantity===1?'unidade':'unidades'):quantity+' '+unit;
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
 const initial:Place[]=[
   {id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},
@@ -384,8 +383,6 @@ function App(){
       if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}).catch(()=>syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.'));
     });
   }
-
-  const quantityStep=(unit:Unit)=>unit==='kg'||unit==='L'?0.1:1;
 
   async function changeQty(placeId:string,subId:string,id:string,delta:number){
     const food=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===id);
