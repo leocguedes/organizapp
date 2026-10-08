@@ -254,6 +254,21 @@ function App(){
     setFoodModal(null);
   }
 
+  async function addToExistingFood(placeId:string,subId:string,existingId:string,amount:number,unit:Unit){
+    const existing=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===existingId);
+    if(!existing||existing.unit!==unit||amount<=0)return;
+    const nextQty=Number((existing.quantity+amount).toFixed(3));
+    const snapshot=places;
+    const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.map(f=>f.id===existingId?{...f,quantity:nextQty}:f)})});
+    setPlaces(next);
+    if(userId){
+      const{error}=await supabase.from('foods').update({quantity:nextQty}).eq('id',existingId);
+      if(error){setPlaces(snapshot);syncError('Não foi possível somar a quantidade.');return}
+    }
+    setFoodModal(null);
+    setAuthMessage(null);
+  }
+
   async function removeFood(placeId:string,subId:string,id:string){
     const snapshot=places;
     const removed=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===subId)?.foods.find(f=>f.id===id);
@@ -498,7 +513,7 @@ function Empty({title,text,action}:{title:string;text:string;action?:()=>void}){
   return <div className="empty"><PackagePlus size={30}/><h3>{title}</h3><p>{text}</p>{action&&<button className="primary" onClick={action}><Plus size={18}/> Adicionar alimento</button>}</div>
 }
 
-function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?:Food;placeId:string;subId:string;places:Place[];recentFoods:RecentFood[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void}){
+function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddToExisting}:{data?:Food;placeId:string;subId:string;places:Place[];recentFoods:RecentFood[];onClose:()=>void;onSave:(placeId:string,subId:string,d:Omit<Food,'id'>)=>void;onAddToExisting:(placeId:string,subId:string,existingId:string,amount:number,unit:Unit)=>void}){
   const[name,setName]=useState(data?.name||'');
   const[quantity,setQuantity]=useState(data?.quantity||1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
@@ -506,9 +521,11 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?
   const[chosenSub,setChosenSub]=useState(subId);
   const currentPlace=places.find(p=>p.id===chosenPlace);
   const existingFoods=currentPlace?.subdivisions.find(s=>s.id===chosenSub)?.foods||[];
-  const duplicate=!!name.trim()&&existingFoods.some(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim()));
+  const duplicateFood=existingFoods.find(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim()));
+  const duplicate=!!duplicateFood;
   const quantityStep=unit==='kg'||unit==='L'?0.1:1;
   const canSave=!!name.trim()&&!!chosenPlace&&!!chosenSub&&Number.isFinite(quantity)&&quantity>=0;
+  const canMerge=!!duplicateFood&&duplicateFood.unit===unit&&quantity>0;
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
     {!data&&<div className="destination-fields">
       <div className="destination-title"><span>Onde ele fica?</span><small>Escolha o local e a subdivisão.</small></div>
@@ -519,7 +536,7 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?
     </div>}
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
-    {duplicate&&<div className="duplicate-note"><strong>Este alimento já existe nesta divisão.</strong><span>Você pode somar a quantidade ao item existente depois, ou adicionar mesmo assim.</span></div>}
+    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {quantity} {unit}</button>}{duplicateFood&&duplicateFood.unit!==unit&&<small>As unidades são diferentes ({duplicateFood.unit} e {unit}), então mantenha como itens separados.</small>}</div>}
     <div className="row">
       <label>Quantidade<div className="number"><button type="button" aria-label="Diminuir quantidade" onClick={()=>setQuantity(Math.max(0,Number((quantity-quantityStep).toFixed(3))))}><Minus/></button><input type="number" min="0" step={quantityStep} value={quantity} onChange={e=>{const value=Number(e.target.value);setQuantity(Number.isFinite(value)?Math.max(0,value):0)}} aria-label="Quantidade" /><button type="button" aria-label="Aumentar quantidade" onClick={()=>setQuantity(Number((quantity+quantityStep).toFixed(3)))}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
