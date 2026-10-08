@@ -252,6 +252,7 @@ function App(){
   }
 
   async function signOut(){
+    ++authRequest.current;
     await supabase.auth.signOut();
     setUser(null);
     setUserId(null);
