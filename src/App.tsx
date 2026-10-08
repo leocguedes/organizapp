@@ -61,6 +61,13 @@ function getLocalOwner(){
   try{return localStorage.getItem(localOwnerKey)}catch{return null}
 }
 
+function setLocalOwner(userId:string|null){
+  try{
+    if(userId)localStorage.setItem(localOwnerKey,userId);
+    else localStorage.removeItem(localOwnerKey);
+  }catch{}
+}
+
 function readLocalPlaces(userId?:string|null){
   const scoped=readStoredPlaces(userId?userLocalKey(userId):anonymousLocalKey);
   if(scoped)return scoped;
