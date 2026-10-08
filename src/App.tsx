@@ -497,109 +497,253 @@ function App(){
 
   function openAddFoodFromHome(){ if(!places.length){setPlaceToEdit(null);setPlaceModal(true);return;} setFoodModal({place:'',sub:''}); }
 
-  return <div className="app">
-    <header>
-      <div className="brand">
-        <div className="logo"><Home size={20}/></div>
-        <div><h1>OrganizaApp</h1><span>Sua casa, organizada.</span></div>
-      </div>
-      <div className="header-actions">
-        <button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>
-          <span className="auth-label">{user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}</span><span className="auth-short">{user&&!user.is_anonymous?'Sair':'Entrar'}</span>
-        </button>
-        <button className="icon-btn" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}} title="Gerenciar locais"><Settings size={20}/></button>
-      </div>
-    </header>
-    <main>
-      {authMessage&&<div className="auth-note" role="status" aria-live="polite">{authMessage}</div>}
-      {selected?<section>
-        <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
-        <div className="location-hero">
-          <div className="location-identity">
-            <div className="location-icon"><Box size={23}/></div>
-            <div>
-              <p className="eyebrow">LOCAL</p>
-              <h2>{current?.name}</h2>
-              <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'} <span className="sync-status">{!online?'Sem internet · dados locais':synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
-            </div>
-          </div>
-          <button className="primary location-add" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={18}/> Adicionar alimento</button>
+  return (
+    <div className="app">
+      <header>
+        <div className="brand">
+          <div className="logo"><Home size={20}/></div>
+          <div><h1>OrganizaApp</h1><span>Sua casa, organizada.</span></div>
         </div>
-        <div className="sub-head">
-          <div><h3>Divisões</h3><p>Escolha onde quer guardar ou encontrar seus alimentos.</p></div>
-          <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova divisão</button>
+        <div className="header-actions">
+          <button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>
+            <span className="auth-label">{user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}</span>
+            <span className="auth-short">{user&&!user.is_anonymous?'Sair':'Entrar'}</span>
+          </button>
+          <button className="icon-btn" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}} title="Gerenciar locais"><Settings size={20}/></button>
         </div>
-        <div className="sub-list">
-          {current?.subdivisions.map(s=><div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
-            <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
-              <span><strong>{s.name}</strong><small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small></span>
-              <ChevronRight size={18}/>
-            </button>
-            <button className="sub-edit" title="Renomear subdivisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}><Edit3 size={16}/></button>
-          </div>)}
-        </div>
-        {selectedSub&&sub?<><div className="selected-sub-head"><div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div><span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span></div>{sub.foods.length?<div className="food-list">
-          {sub.foods.map(f=><div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
-            <div className="food-icon"><Apple size={19}/></div>
-            <div className="food-name"><strong>{f.name}</strong><span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span></div>
-            <div className="qty">
-              <button disabled={f.quantity===0} onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
-              <b>{f.quantity}</b>
-              {f.unit!=='unidades'&&<span className="qty-unit" aria-hidden="true">{f.unit}</span>}
-              <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}><Plus size={15}/></button>
-            </div>
-            <div className="food-actions">
-              <button className="small action-trigger" title="Mais ações" aria-label={'Mais ações para '+f.name} onClick={e=>{e.stopPropagation();setFoodMenu(foodMenu===f.id?null:f.id)}}><MoreHorizontal size={18}/></button>
-              {foodMenu===f.id&&<div className="action-menu" onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>{setFoodModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><Edit3 size={16}/> Editar</button>
-                <button onClick={()=>{setMoveModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><MoveRight size={16}/> Mover para...</button>
-                <button className="danger" onClick={()=>removeFood(selected,selectedSub,f.id)}><Trash2 size={16}/> Excluir</button>
-              </div>}
-            </div>
-          </div>)}
-        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>}</>:null}
-      </section>:<section>
-        <div className="hero">
-          <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre o que precisa.</h2><p>Veja onde cada alimento está e mantenha sua casa organizada sem esforço.</p></div>
-        </div>
-        <div className="home-tools">
-          <div className="search">
-            <Search size={19}/><input aria-label="Buscar alimento" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Onde está o seu alimento?"/>
-            {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
-          </div>
-          {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
-        </div>
-        {search?<><div className="search-results-head"><div><p className="eyebrow">RESULTADOS</p><h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3></div></div>{results.length?<div className="results">
-          {results.map(r=><button className="result" key={r.id} onClick={()=>openSearchResult(r.placeId,r.subId)}>
-            <Apple size={18}/>
-            <span><strong>{r.name}</strong><small>{r.quantity===0?'Sem estoque':formatQuantity(r.quantity,r.unit)} · {r.place} · {r.sub}</small></span>
-            <ChevronRight size={17}/>
-          </button>)}
-        </div>:<div className="search-empty"><Search size={24}/><h3>Nenhum alimento encontrado</h3><p>Tente outro nome ou limpe a busca para ver seus locais.</p><button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button></div>}</>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
-          {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
-            {places.map(p=><div className="place-card" key={p.id} role="button" aria-label={'Abrir '+p.name} tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}>
-              <div className="place-top">
-                <div className="place-icon"><Box size={21}/></div>
-                <div className="place-card-actions">
-                  <button className="card-edit" title="Renomear local" aria-label={'Renomear '+p.name} onClick={e=>{e.stopPropagation();setPlaceToEdit(p.id);setPlaceModal(true)}}><Edit3 size={16}/></button>
-                  <div className="arrow">→</div>
+      </header>
+
+      <main>
+        {authMessage&&<div className="auth-note" role="status" aria-live="polite">{authMessage}</div>}
+
+        {selected?(
+          <section>
+            <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
+
+            <div className="location-hero">
+              <div className="location-identity">
+                <div className="location-icon"><Box size={23}/></div>
+                <div>
+                  <p className="eyebrow">LOCAL</p>
+                  <h2>{current?.name}</h2>
+                  <p>
+                    {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0}{' '}
+                    {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}{' '}
+                    <span className="sync-status">{!online?'Sem internet · dados locais':synced?'Sincronizado':'Somente neste dispositivo'}</span>
+                  </p>
                 </div>
               </div>
-              <h3>{p.name}</h3>
-              <p>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}</p>
-            </div>)}
-          </div>
-        </>}
-      </section>}
-    </main>
-    {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)} onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}/>} 
-    {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
-    {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
-    {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
-    {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
-    {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
-    {undo&&<div className="undo-toast" role="status" aria-live="polite"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
-  </div>
+              <button className="primary location-add" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}>
+                <Plus size={18}/> Adicionar alimento
+              </button>
+            </div>
+
+            <div className="sub-head">
+              <div>
+                <h3>Divisões</h3>
+                <p>Escolha onde quer guardar ou encontrar seus alimentos.</p>
+              </div>
+              <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova divisão</button>
+            </div>
+
+            <div className="sub-list">
+              {current?.subdivisions.map(s=>(
+                <div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
+                  <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
+                    <span>
+                      <strong>{s.name}</strong>
+                      <small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small>
+                    </span>
+                    <ChevronRight size={18}/>
+                  </button>
+                  <button className="sub-edit" title="Renomear subdivisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}>
+                    <Edit3 size={16}/>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {selectedSub&&sub?(
+              <>
+                <div className="selected-sub-head">
+                  <div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div>
+                  <span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span>
+                </div>
+
+                {sub.foods.length?(
+                  <div className="food-list">
+                    {sub.foods.map(f=>(
+                      <div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
+                        <div className="food-icon"><Apple size={19}/></div>
+                        <div className="food-name">
+                          <strong>{f.name}</strong>
+                          <span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span>
+                        </div>
+                        <div className="qty">
+                          <button disabled={f.quantity===0} onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}>
+                            <Minus size={15}/>
+                          </button>
+                          <b>{f.quantity}</b>
+                          {f.unit!=='unidades'&&<span className="qty-unit" aria-hidden="true">{f.unit}</span>}
+                          <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}>
+                            <Plus size={15}/>
+                          </button>
+                        </div>
+                        <div className="food-actions">
+                          <button className="small action-trigger" title="Mais ações" aria-label={'Mais ações para '+f.name} onClick={e=>{e.stopPropagation();setFoodMenu(foodMenu===f.id?null:f.id)}}>
+                            <MoreHorizontal size={18}/>
+                          </button>
+                          {foodMenu===f.id&&(
+                            <div className="action-menu" onClick={e=>e.stopPropagation()}>
+                              <button onClick={()=>{setFoodModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><Edit3 size={16}/> Editar</button>
+                              <button onClick={()=>{setMoveModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><MoveRight size={16}/> Mover para...</button>
+                              <button className="danger" onClick={()=>removeFood(selected,selectedSub,f.id)}><Trash2 size={16}/> Excluir</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ):(
+                  <Empty
+                    title={'Nenhum alimento em '+sub.name}
+                    text="Adicione os alimentos que ficam nesta subdivisão."
+                    action={()=>setFoodModal({place:selected,sub:selectedSub})}
+                  />
+                )}
+              </>
+            ):null}
+          </section>
+        ):(
+          <section>
+            <div className="hero">
+              <div className="hero-copy">
+                <p className="eyebrow">SUA CASA</p>
+                <h2>Encontre o que precisa.</h2>
+                <p>Veja onde cada alimento está e mantenha sua casa organizada sem esforço.</p>
+              </div>
+            </div>
+
+            <div className="home-tools">
+              <div className="search">
+                <Search size={19}/>
+                <input aria-label="Buscar alimento" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Onde está o seu alimento?"/>
+                {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
+              </div>
+              {!search&&(
+                <button className="home-add" onClick={openAddFoodFromHome}>
+                  <span className="home-add-icon"><Plus size={20}/></span>
+                  <span>
+                    <strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong>
+                    <small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small>
+                  </span>
+                  <ChevronRight size={18}/>
+                </button>
+              )}
+            </div>
+
+            {search?(
+              <>
+                <div className="search-results-head">
+                  <div>
+                    <p className="eyebrow">RESULTADOS</p>
+                    <h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3>
+                  </div>
+                </div>
+
+                {results.length?(
+                  <div className="results">
+                    {results.map(r=>(
+                      <button className="result" key={r.id} onClick={()=>openSearchResult(r.placeId,r.subId)}>
+                        <Apple size={18}/>
+                        <span>
+                          <strong>{r.name}</strong>
+                          <small>{r.quantity===0?'Sem estoque':formatQuantity(r.quantity,r.unit)} · {r.place} · {r.sub}</small>
+                        </span>
+                        <ChevronRight size={17}/>
+                      </button>
+                    ))}
+                  </div>
+                ):(
+                  <div className="search-empty">
+                    <Search size={24}/>
+                    <h3>Nenhum alimento encontrado</h3>
+                    <p>Tente outro nome ou limpe a busca para ver seus locais.</p>
+                    <button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button>
+                  </div>
+                )}
+              </>
+            ):(
+              <>
+                <div className="section-title">
+                  <div>
+                    <h3>Seus locais</h3>
+                    <p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p>
+                  </div>
+                  <button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button>
+                </div>
+
+                {places.length===0?(
+                  <div className="no-places">
+                    <div className="no-places-icon"><Box size={22}/></div>
+                    <h3>Comece pelo primeiro local</h3>
+                    <p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p>
+                    <button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button>
+                  </div>
+                ):(
+                  <div className="places">
+                    {places.map(p=>(
+                      <div
+                        className="place-card"
+                        key={p.id}
+                        role="button"
+                        aria-label={'Abrir '+p.name}
+                        tabIndex={0}
+                        onClick={()=>openPlace(p.id)}
+                        onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}
+                      >
+                        <div className="place-top">
+                          <div className="place-icon"><Box size={21}/></div>
+                          <div className="place-card-actions">
+                            <button className="card-edit" title="Renomear local" aria-label={'Renomear '+p.name} onClick={e=>{e.stopPropagation();setPlaceToEdit(p.id);setPlaceModal(true)}}>
+                              <Edit3 size={16}/>
+                            </button>
+                            <div className="arrow">→</div>
+                          </div>
+                        </div>
+                        <h3>{p.name}</h3>
+                        <p>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+      </main>
+
+      {foodModal&&(
+        <FoodModal
+          data={foodModal.food}
+          placeId={foodModal.place}
+          subId={foodModal.sub}
+          places={places}
+          recentFoods={recentFoods}
+          onClose={()=>setFoodModal(null)}
+          onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)}
+          onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}
+        />
+      )}
+      {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
+      {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
+      {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
+      {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+      {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
+      {undo&&<div className="undo-toast" role="status" aria-live="polite"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
+    </div>
+  );
 }
 
 function PasswordRecoveryModal({busy,onClose,onSubmit}:{busy:boolean;onClose:()=>void;onSubmit:(password:string)=>void}){
