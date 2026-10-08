@@ -546,22 +546,30 @@ function App(){
               <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova divisão</button>
             </div>
 
-            <div className="sub-list">
-              {current?.subdivisions.map(s=>(
-                <div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
-                  <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
-                    <span>
-                      <strong>{s.name}</strong>
-                      <small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small>
-                    </span>
-                    <ChevronRight size={18}/>
-                  </button>
-                  <button className="sub-edit" title="Renomear subdivisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}>
-                    <Edit3 size={16}/>
-                  </button>
-                </div>
-              ))}
-            </div>
+            {current?.subdivisions.length?(
+              <div className="sub-list">
+                {current.subdivisions.map(s=>(
+                  <div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
+                    <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
+                      <span>
+                        <strong>{s.name}</strong>
+                        <small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small>
+                      </span>
+                      <ChevronRight size={18}/>
+                    </button>
+                    <button className="sub-edit" title="Renomear divisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}>
+                      <Edit3 size={16}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ):(
+              <div className="no-subdivisions">
+                <div className="no-subdivisions-icon"><Box size={20}/></div>
+                <div><strong>Nenhuma divisão criada</strong><span>Crie a primeira para começar a guardar seus alimentos.</span></div>
+                <button className="primary" onClick={()=>setSubModal({place:selected!})}><Plus size={17}/> Criar divisão</button>
+              </div>
+            )}
 
             {selectedSub&&sub?(
               <>
