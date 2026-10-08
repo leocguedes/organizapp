@@ -137,9 +137,9 @@ function App(){
       if(active&&request===authRequest.current)setSynced(true);
     };
     load();
-    const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{
+    const{data:listener}=supabase.auth.onAuthStateChange((event,session)=>{
       if(!active)return;
-      ++authRequest.current;
+      if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED')++authRequest.current;
       if(!session?.user){
         setUser(null);
         setUserId(null);
