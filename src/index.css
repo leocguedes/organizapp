@@ -242,3 +242,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   .auth-short{display:inline}
   .sync-btn{padding:8px 10px}
 }
+
+.manage-empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:22px 16px;margin:4px 0 16px;border:1px dashed #d3ded1;border-radius:14px;background:#f7f9f5}
+.manage-empty .no-places-icon{margin:0 0 9px}
+.manage-empty strong{font-size:13px;color:#4b5c51}
+.manage-empty span{margin-top:3px;color:#8b968f;font-size:11px}
