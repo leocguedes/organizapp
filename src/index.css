@@ -228,3 +228,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .qty button:disabled{opacity:.35;cursor:not-allowed;background:#f2f4f0}
 .qty button:disabled:hover{background:#f2f4f0;border-color:#dde4db;color:#607067}
 .food.out-of-stock .qty button:disabled{opacity:.3}
+
+.auth-short{display:none}
+@media(max-width:460px){
+  .brand span{display:none}
+  .brand{gap:8px}
+  .logo{width:37px;height:37px;border-radius:11px}
+}
+@media(max-width:380px){
+  header{padding-left:12px;padding-right:12px}
+  .brand h1{font-size:16px}
+  .auth-label{display:none}
+  .auth-short{display:inline}
+  .sync-btn{padding:8px 10px}
+}
