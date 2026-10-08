@@ -833,14 +833,47 @@ function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place
   const initialEdit=places.find(p=>p.id===initialEditId)||null;
   const[name,setName]=useState(initialEdit?.name||'');
   const[edit,setEdit]=useState<Place|null>(initialEdit);
-  return <Modal title={edit?'Editar local':'Gerenciar locais'} onClose={onClose}>
-    {!edit&&<><p className="modal-help">Cada local pode ter suas próprias subdivisões.</p><div className="manage-list">{places.map(p=><div key={p.id}><span><strong>{p.name}</strong><small>{p.subdivisions.length} subdivisões</small></span><div><button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name} aria-label={'Renomear '+p.name}><Edit3 size={16}/></button><button className="danger" onClick={()=>onDelete(p.id)} title={'Excluir '+p.name} aria-label={'Excluir '+p.name}><Trash2 size={16}/></button></div></div>)}</div></>}
-    {edit&&<button className="back modal-back" onClick={()=>{setEdit(null);setName('')}}>← Voltar aos locais</button>}
-    <label>{edit?'Nome do local':'Novo local'}<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Geladeira"/></label>
-    <button className="primary full" disabled={!name.trim()} onClick={()=>{onSave(name,edit?.id);setEdit(null);setName('')}}>{edit?'Salvar alterações':'Criar local'}</button>
+  const[adding,setAdding]=useState(!places.length&&!initialEdit);
+  const startAdd=()=>{setEdit(null);setName('');setAdding(true)};
+  const goBack=()=>{setEdit(null);setName('');setAdding(false)};
+  const save=()=>{onSave(name,edit?.id);goBack()};
+  return <Modal title={edit?'Editar local':adding?'Novo local':'Seus locais'} onClose={onClose}>
+    {!edit&&!adding?(
+      <>
+        <p className="modal-help">Organize sua casa por locais como geladeira, freezer, despensa ou armário.</p>
+        {places.length?(
+          <div className="manage-list">
+            {places.map(p=>(
+              <div key={p.id}>
+                <span>
+                  <strong>{p.name}</strong>
+                  <small>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'}</small>
+                </span>
+                <div>
+                  <button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name} aria-label={'Renomear '+p.name}><Edit3 size={16}/></button>
+                  <button className="danger" onClick={()=>onDelete(p.id)} title={'Excluir '+p.name} aria-label={'Excluir '+p.name}><Trash2 size={16}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ):(
+          <div className="manage-empty">
+            <div className="no-places-icon"><Box size={20}/></div>
+            <strong>Nenhum local criado</strong>
+            <span>Comece pelo lugar onde seus alimentos ficam.</span>
+          </div>
+        )}
+        <button className="primary full" onClick={startAdd}><Plus size={18}/> Novo local</button>
+      </>
+    ):(
+      <>
+        {places.length>0&&<button className="back modal-back" onClick={goBack}>← Voltar aos locais</button>}
+        <label>Nome do local<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Geladeira"/></label>
+        <button className="primary full" disabled={!name.trim()} onClick={save}>{edit?'Salvar alterações':'Criar local'}</button>
+      </>
+    )}
   </Modal>
 }
-
 function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onSave:(name:string)=>void;onDelete:(id:string)=>void}){
   const[name,setName]=useState(data?.name||'');
   return <Modal title={data?'Editar subdivisão':'Nova subdivisão'} onClose={onClose}>
