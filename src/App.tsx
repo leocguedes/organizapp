@@ -506,8 +506,9 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?
   const[chosenSub,setChosenSub]=useState(subId);
   const currentPlace=places.find(p=>p.id===chosenPlace);
   const existingFoods=currentPlace?.subdivisions.find(s=>s.id===chosenSub)?.foods||[];
-  const duplicate=!!name.trim()&&existingFoods.some(f=>f.id!==data?.id&&f.name.trim().toLowerCase()===name.trim().toLowerCase());
-  const canSave=!!name.trim()&&!!chosenPlace&&!!chosenSub;
+  const duplicate=!!name.trim()&&existingFoods.some(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim()));
+  const quantityStep=unit==='kg'||unit==='L'?0.1:1;
+  const canSave=!!name.trim()&&!!chosenPlace&&!!chosenSub&&Number.isFinite(quantity)&&quantity>=0;
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
     {!data&&<div className="destination-fields">
       <div className="destination-title"><span>Onde ele fica?</span><small>Escolha o local e a subdivisão.</small></div>
@@ -520,7 +521,7 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave}:{data?
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
     {duplicate&&<div className="duplicate-note"><strong>Este alimento já existe nesta divisão.</strong><span>Você pode somar a quantidade ao item existente depois, ou adicionar mesmo assim.</span></div>}
     <div className="row">
-      <label>Quantidade<div className="number"><button onClick={()=>setQuantity(Math.max(0,quantity-1))}><Minus/></button><input type="number" min="0" value={quantity} onChange={e=>setQuantity(Math.max(0,Number(e.target.value)))} /><button onClick={()=>setQuantity(quantity+1)}><Plus/></button></div></label>
+      <label>Quantidade<div className="number"><button type="button" aria-label="Diminuir quantidade" onClick={()=>setQuantity(Math.max(0,Number((quantity-quantityStep).toFixed(3))))}><Minus/></button><input type="number" min="0" step={quantityStep} value={quantity} onChange={e=>{const value=Number(e.target.value);setQuantity(Number.isFinite(value)?Math.max(0,value):0)}} aria-label="Quantidade" /><button type="button" aria-label="Aumentar quantidade" onClick={()=>setQuantity(Number((quantity+quantityStep).toFixed(3)))}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
     </div>
     <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,chosenSub,{name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
