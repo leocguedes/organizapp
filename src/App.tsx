@@ -529,7 +529,7 @@ function App(){
             <div className="food-icon"><Apple size={19}/></div>
             <div className="food-name"><strong>{f.name}</strong><span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span></div>
             <div className="qty">
-              <button onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
+              <button disabled={f.quantity===0} onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}><Minus size={15}/></button>
               <b>{f.quantity}</b>
               {f.unit!=='unidades'&&<span className="qty-unit" aria-hidden="true">{f.unit}</span>}
               <button onClick={()=>changeQty(selected,selectedSub,f.id,1)} aria-label={'Aumentar '+f.name}><Plus size={15}/></button>
