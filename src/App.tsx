@@ -12,6 +12,7 @@ type Place={id:string;name:string;subdivisions:Sub[]};
 type UndoState={label:string;action:()=>void};
 
 const recentFoodsKey='organizapp-recent-foods';
+const localOwnerKey='organizapp-local-owner';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const searchKey=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -45,6 +46,17 @@ function normalize(raw:any):Place[]{
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)}
 function readLocalPlaces(){
   try{return normalize(JSON.parse(localStorage.getItem('organizapp')||'null'))}catch{return initial}
+}
+
+function getLocalOwner(){
+  try{return localStorage.getItem(localOwnerKey)}catch{return null}
+}
+
+function setLocalOwner(userId:string|null){
+  try{
+    if(userId)localStorage.setItem(localOwnerKey,userId);
+    else localStorage.removeItem(localOwnerKey);
+  }catch{}
 }
 
 async function uploadLocal(userId:string,places:Place[]){
@@ -242,10 +254,11 @@ function App(){
       if(mode==='signup'){
         const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});
         if(error){setAuthMessage(error.message);return}
-        if(data.user&&data.session&&local.length){
+        if(data.user&&data.session&&local.length&&!getLocalOwner()){
           try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Conta criada, mas não foi possível sincronizar os dados locais ainda.')}
         }
         if(data.session&&data.user){
+          setLocalOwner(data.user.id);
           const request=++authRequest.current;
           const{data:cloudData,error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
           if(request===authRequest.current&&cloudError){
@@ -263,11 +276,8 @@ function App(){
       }else{
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
         if(error){setAuthMessage(error.message);return}
-        if(data.user&&local.length){
-          const{data:cloud}=await supabase.from('locations').select('id').limit(1);
-          if(!cloud?.length){
-            try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Login realizado, mas não foi possível concluir a sincronização dos dados locais.')}
-          }
+        if(data.user){
+          setLocalOwner(data.user.id);
         }
         const request=++authRequest.current;
         const{data:cloudData, error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
@@ -302,6 +312,7 @@ function App(){
     try{
       const{error}=await supabase.auth.signOut();
       if(error){setAuthMessage('Não foi possível sair da conta agora.');return}
+      setLocalOwner(user?.id||null);
       setUser(null);
       setUserId(null);
       setSynced(false);
