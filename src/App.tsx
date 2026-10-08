@@ -1,4 +1,5 @@
 import{useEffect,useMemo,useRef,useState}from'react';
+import type{ReactNode}from'react';
 import{Apple,Box,ChevronRight,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
@@ -28,18 +29,18 @@ function normalize(raw:any):Place[]{
   if(!Array.isArray(raw))return initial;
   return raw.map((p:any)=>({
     id:isUUID(p.id)?p.id:uid(),
-    name:p.name,
+    name:String(p.name??'').trim(),
     subdivisions:(p.subdivisions?.length?p.subdivisions:[{id:uid(),name:'Geral',foods:p.foods||[]}]).map((s:any)=>({
       id:isUUID(s.id)?s.id:uid(),
-      name:s.name,
+      name:String(s.name??'Geral').trim(),
       foods:(s.foods||[]).map((f:any)=>({
         id:isUUID(f.id)?f.id:uid(),
-        name:f.name,
-        quantity:Number(f.quantity)||0,
-        unit:f.unit||'unidades'
+        name:String(f.name??'').trim(),
+        quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
+        unit:units.includes(f.unit)?f.unit:'unidades'
       }))
     }))
-  }));
+  })).filter((p:Place)=>p.name||p.subdivisions.length);
 }
 
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)}
@@ -64,16 +65,16 @@ async function uploadLocal(userId:string,places:Place[]){
 
 function mapCloudPlaces(data:any[]):Place[]{
   return(data||[]).map((p:any)=>({
-    id:p.id,
-    name:p.name,
-    subdivisions:(p.subdivisions||[]).map((s:any)=>({
-      id:s.id,
-      name:s.name,
-      foods:(s.foods||[]).map((f:any)=>({
-        id:f.id,
-        name:f.name,
-        quantity:Number(f.quantity),
-        unit:f.unit as Unit
+    id:isUUID(p.id)?p.id:uid(),
+    name:String(p.name??'').trim(),
+    subdivisions:(p.subdivisions||[]).filter(Boolean).map((s:any)=>({
+      id:isUUID(s.id)?s.id:uid(),
+      name:String(s.name??'Geral').trim(),
+      foods:(s.foods||[]).filter(Boolean).map((f:any)=>({
+        id:isUUID(f.id)?f.id:uid(),
+        name:String(f.name??'').trim(),
+        quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
+        unit:units.includes(f.unit)?f.unit:'unidades'
       }))
     }))
   }));
@@ -174,6 +175,31 @@ function App(){
     return()=>window.clearTimeout(timer);
   },[authMessage]);
 
+  async function refreshCloud(userIdToLoad=userId){
+    if(!userIdToLoad)return;
+    const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+    if(error){
+      setSynced(false);
+      return;
+    }
+    const cloudPlaces=mapCloudPlaces(data||[]);
+    setPlaces(cloudPlaces);
+    setSynced(true);
+  }
+
+  useEffect(()=>{
+    if(!userId)return;
+    const refresh=()=>{
+      if(navigator.onLine)void refreshCloud(userId);
+    };
+    window.addEventListener('focus',refresh);
+    window.addEventListener('online',refresh);
+    return()=>{
+      window.removeEventListener('focus',refresh);
+      window.removeEventListener('online',refresh);
+    };
+  },[userId]);
+
   function rememberFood(name:string,unit:Unit){
     setRecentFoods(prev=>{
       const key=searchKey(name.trim());
@@ -271,12 +297,17 @@ function App(){
   }
 
   async function signOut(){
+    if(authBusy)return;
+    setAuthBusy(true);
     ++authRequest.current;
-    await supabase.auth.signOut();
-    setUser(null);
-    setUserId(null);
-    setSynced(false);
-    setAuthMessage(null);
+    try{
+      const{error}=await supabase.auth.signOut();
+      if(error){setAuthMessage('Não foi possível sair da conta agora.');return}
+      setUser(null);
+      setUserId(null);
+      setSynced(false);
+      setAuthMessage(null);
+    }finally{setAuthBusy(false)}
   }
 
   async function updatePassword(password:string){
@@ -306,7 +337,11 @@ function App(){
   },[search,places]);
 
   async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){
-    const food={...data,id:id||uid()};
+    const cleanName=data.name.trim();
+    if(!cleanName||!places.some(p=>p.id===placeId&&p.subdivisions.some(s=>s.id===subId)))return;
+    const safeQuantity=Math.max(0,Number.isFinite(data.quantity)?Number(data.quantity):0);
+    const safeUnit=units.includes(data.unit)?data.unit:'unidades';
+    const food={name:cleanName,quantity:safeQuantity,unit:safeUnit,id:id||uid()};
     const snapshot=places;
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:id?s.foods.map(f=>f.id===id?food:f):[...s.foods,food]})});
     setPlaces(next);
@@ -408,6 +443,8 @@ function App(){
   async function savePlace(name:string,id?:string){
     const clean=name.trim();
     if(!clean)return;
+    const duplicate=places.some(p=>p.id!==id&&searchKey(p.name)===searchKey(clean));
+    if(duplicate){setAuthMessage('Já existe um local com esse nome.');return;}
     const placeId=id||uid();
     const newSub=id?null:makeSub('Geral');
     const snapshot=places;
@@ -417,8 +454,13 @@ function App(){
       const{error}=await supabase.from('locations').upsert({id:placeId,user_id:userId,name:clean});
       if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return}
       if(newSub){
-        const{subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
-        if(subError){setPlaces(snapshot);syncError('Não foi possível criar a subdivisão inicial.');return}
+        const{error:subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
+        if(subError){
+          await supabase.from('locations').delete().eq('id',placeId);
+          setPlaces(snapshot);
+          syncError('Não foi possível criar a subdivisão inicial.');
+          return;
+        }
       }
     }
     setPlaceModal(false);
@@ -450,6 +492,10 @@ function App(){
   async function saveSub(placeId:string,name:string,id?:string){
     const clean=name.trim();
     if(!clean)return;
+    const place=places.find(p=>p.id===placeId);
+    if(!place)return;
+    const duplicate=place.subdivisions.some(s=>s.id!==id&&searchKey(s.name)===searchKey(clean));
+    if(duplicate){setAuthMessage('Já existe uma divisão com esse nome neste local.');return;}
     const subId=id||uid();
     const snapshot=places;
     const next=id?places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id===id?{...s,name:clean}:s)}):places.map(p=>p.id===placeId?{...p,subdivisions:[...p.subdivisions,{id:subId,name:clean,foods:[]}]}:p);
@@ -892,7 +938,7 @@ function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onS
   </Modal>
 }
 
-function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:React.ReactNode}){
+function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}){
   useEffect(()=>{
     const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose()};
     document.addEventListener('keydown',onKey);
