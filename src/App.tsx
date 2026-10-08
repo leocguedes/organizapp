@@ -417,17 +417,20 @@ function App(){
       {authMessage&&<div className="auth-note">{authMessage}</div>}
       {selected?<section>
         <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">LOCAL</p>
-            <h2>{current?.name}</h2>
-            <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'item':'itens'} <span className="sync-status">{synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
+        <div className="location-hero">
+          <div className="location-identity">
+            <div className="location-icon"><Box size={23}/></div>
+            <div>
+              <p className="eyebrow">LOCAL</p>
+              <h2>{current?.name}</h2>
+              <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'} <span className="sync-status">{synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
+            </div>
           </div>
-          <button className="primary" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={19}/> Adicionar alimento</button>
+          <button className="primary location-add" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={18}/> Adicionar alimento</button>
         </div>
         <div className="sub-head">
-          <h3>Divisões deste local</h3>
-          <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova subdivisão</button>
+          <div><h3>Divisões</h3><p>Escolha onde quer guardar ou encontrar seus alimentos.</p></div>
+          <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova divisão</button>
         </div>
         <div className="sub-list">
           {current?.subdivisions.map(s=><div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
