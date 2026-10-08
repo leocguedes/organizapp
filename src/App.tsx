@@ -498,11 +498,11 @@ function App(){
     return true;
   }
 
-  async function saveSub(placeId:string,name:string,id?:string){
+  async function saveSub(placeId:string,name:string,id?:string):Promise<boolean>{
     const clean=name.trim();
     if(!clean)return false;
     const place=places.find(p=>p.id===placeId);
-    if(!place)return;
+    if(!place)return false;
     const duplicate=place.subdivisions.some(s=>s.id!==id&&searchKey(s.name)===searchKey(clean));
     if(duplicate){setAuthMessage('Já existe uma divisão com esse nome neste local.');return false;}
     const subId=id||uid();
