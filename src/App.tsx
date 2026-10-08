@@ -447,11 +447,11 @@ function App(){
     if(destinationPlace&&destinationSub)setAuthMessage(null);
   }
 
-  async function savePlace(name:string,id?:string){
+  async function savePlace(name:string,id?:string):Promise<boolean>{
     const clean=name.trim();
-    if(!clean)return;
+    if(!clean)return false;
     const duplicate=places.some(p=>p.id!==id&&searchKey(p.name)===searchKey(clean));
-    if(duplicate){setAuthMessage('Já existe um local com esse nome.');return;}
+    if(duplicate){setAuthMessage('Já existe um local com esse nome.');return false;}
     const placeId=id||uid();
     const newSub=id?null:makeSub('Geral');
     const snapshot=places;
@@ -459,30 +459,31 @@ function App(){
     setPlaces(next);
     if(userId){
       const{error}=await supabase.from('locations').upsert({id:placeId,user_id:userId,name:clean});
-      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return}
+      if(error){setPlaces(snapshot);syncError('Não foi possível salvar o local.');return false}
       if(newSub){
         const{error:subError}=await supabase.from('subdivisions').upsert({id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name});
         if(subError){
           await supabase.from('locations').delete().eq('id',placeId);
           setPlaces(snapshot);
           syncError('Não foi possível criar a subdivisão inicial.');
-          return;
+          return false;
         }
       }
     }
     setPlaceModal(false);
     setPlaceToEdit(null);
+    return true;
   }
 
-  async function removePlace(id:string){
+  async function removePlace(id:string):Promise<boolean>{
     const removed=places.find(p=>p.id===id);
-    if(!removed)return;
+    if(!removed)return false;
     const snapshot=places;
     const index=places.findIndex(p=>p.id===id);
     setPlaces(ps=>ps.filter(p=>p.id!==id));
     if(userId){
       const{error}=await supabase.from('locations').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');return}
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');return false}
     }
     if(selected===id){setSelected(null);setSelectedSub(null)}
     offerUndo('Local removido',()=>{
@@ -494,35 +495,37 @@ function App(){
       });
       if(userId)uploadLocal(userId,[removed]).catch(()=>syncError('O local foi restaurado neste dispositivo, mas a sincronização falhou.'));
     });
+    return true;
   }
 
   async function saveSub(placeId:string,name:string,id?:string){
     const clean=name.trim();
-    if(!clean)return;
+    if(!clean)return false;
     const place=places.find(p=>p.id===placeId);
     if(!place)return;
     const duplicate=place.subdivisions.some(s=>s.id!==id&&searchKey(s.name)===searchKey(clean));
-    if(duplicate){setAuthMessage('Já existe uma divisão com esse nome neste local.');return;}
+    if(duplicate){setAuthMessage('Já existe uma divisão com esse nome neste local.');return false;}
     const subId=id||uid();
     const snapshot=places;
     const next=id?places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id===id?{...s,name:clean}:s)}):places.map(p=>p.id===placeId?{...p,subdivisions:[...p.subdivisions,{id:subId,name:clean,foods:[]}]}:p);
     setPlaces(next);
     if(userId){
       const{error}=await supabase.from('subdivisions').upsert({id:subId,user_id:userId,location_id:placeId,name:clean});
-      if(error){setPlaces(snapshot);syncError('Não foi possível salvar a subdivisão.');return}
+      if(error){setPlaces(snapshot);syncError('Não foi possível salvar a subdivisão.');return false}
     }
     setSubModal(null);
+    return true;
   }
 
-  async function removeSub(placeId:string,id:string){
+  async function removeSub(placeId:string,id:string):Promise<boolean>{
     const removed=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===id);
-    if(!removed)return;
+    if(!removed)return false;
     const snapshot=places;
     const index=places.find(p=>p.id===placeId)?.subdivisions.findIndex(s=>s.id===id)??-1;
     setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.filter(s=>s.id!==id)}));
     if(userId){
       const{error}=await supabase.from('subdivisions').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir a subdivisão.');return}
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir a subdivisão.');return false}
     }
     if(selectedSub===id)setSelectedSub(null);
     offerUndo('Divisão removida',()=>{
@@ -534,6 +537,7 @@ function App(){
       }));
       if(userId)supabase.from('subdivisions').upsert({id:removed.id,user_id:userId,location_id:placeId,name:removed.name}).then(({error})=>{if(error)syncError('A divisão foi restaurada neste dispositivo, mas a sincronização falhou.')});
     });
+    return true;
   }
 
   function openPlace(id:string){
@@ -798,7 +802,7 @@ function App(){
         />
       )}
       {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
-      {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
+      {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{const ok=await removePlace(id);if(ok){setPlaceModal(false);setPlaceToEdit(null)}return ok}}/>}
       {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
       {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
       {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
@@ -890,14 +894,14 @@ function MoveModal({data,places,onClose,onMove}:{data:{place:string;sub:string;f
   </Modal>
 }
 
-function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place[];initialEditId?:string|null;onClose:()=>void;onSave:(name:string,id?:string)=>void;onDelete:(id:string)=>void}){
+function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place[];initialEditId?:string|null;onClose:()=>void;onSave:(name:string,id?:string)=>Promise<boolean>;onDelete:(id:string)=>Promise<boolean>}){
   const initialEdit=places.find(p=>p.id===initialEditId)||null;
   const[name,setName]=useState(initialEdit?.name||'');
   const[edit,setEdit]=useState<Place|null>(initialEdit);
   const[adding,setAdding]=useState(!places.length&&!initialEdit);
   const startAdd=()=>{setEdit(null);setName('');setAdding(true)};
   const goBack=()=>{setEdit(null);setName('');setAdding(false)};
-  const save=()=>{onSave(name,edit?.id);goBack()};
+  const save=async()=>{if(await onSave(name,edit?.id))goBack()};
   return <Modal title={edit?'Editar local':adding?'Novo local':'Seus locais'} onClose={onClose}>
     {!edit&&!adding?(
       <>
@@ -935,13 +939,13 @@ function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place
     )}
   </Modal>
 }
-function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onSave:(name:string)=>void;onDelete:(id:string)=>void}){
+function SubModal({data,onClose,onSave,onDelete}:{data?:Sub;onClose:()=>void;onSave:(name:string)=>Promise<boolean>;onDelete:(id:string)=>Promise<boolean>}){
   const[name,setName]=useState(data?.name||'');
   return <Modal title={data?'Editar subdivisão':'Nova subdivisão'} onClose={onClose}>
     <p className="modal-help">{data?'Altere o nome desta divisão.':'Crie uma divisão como “Gaveta de cima”, “Porta” ou “Prateleira 2”.'}</p>
     <label>Nome<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Gaveta de cima"/></label>
-    <button className="primary full" disabled={!name.trim()} onClick={()=>onSave(name)}>{data?'Salvar alterações':'Criar subdivisão'}</button>
-    {data&&data.foods.length===0&&<button className="text-danger" onClick={()=>{onDelete(data.id);onClose()}}><Trash2 size={15}/> Excluir subdivisão</button>}
+    <button className="primary full" disabled={!name.trim()} onClick={async()=>{await onSave(name)}}>{data?'Salvar alterações':'Criar subdivisão'}</button>
+    {data&&data.foods.length===0&&<button className="text-danger" onClick={async()=>{if(await onDelete(data.id))onClose()}}><Trash2 size={15}/> Excluir subdivisão</button>}
   </Modal>
 }
 
