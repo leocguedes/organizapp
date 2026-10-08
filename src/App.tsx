@@ -316,7 +316,7 @@ function App(){
     setFoodMenu(null);
     offerUndo('Alimento removido',()=>{
       setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.some(f=>f.id===removed.id)?s.foods:[...s.foods,removed]})}));
-      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit});
+      if(userId)supabase.from('foods').upsert({id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}).catch(()=>syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.'));
     });
   }
 
@@ -369,7 +369,7 @@ function App(){
         if(p.id===fromPlaceId)return{...p,subdivisions:p.subdivisions.map(s=>s.id===fromSubId?{...s,foods:s.foods.some(f=>f.id===foodId)?s.foods:[...s.foods,food]}:s)};
         return p;
       }));
-      if(userId)supabase.from('foods').update({subdivision_id:fromSubId}).eq('id',foodId);
+      if(userId)supabase.from('foods').update({subdivision_id:fromSubId}).eq('id',foodId).then(({error})=>{if(error)syncError('O alimento foi restaurado neste dispositivo, mas a sincronização falhou.')});
     });
     setFoodMenu(null);
     if(destinationPlace&&destinationSub)setAuthMessage(null);
@@ -501,7 +501,7 @@ function App(){
         </div>
         <div className="sub-list">
           {current?.subdivisions.map(s=><div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
-            <button className="sub-select" onClick={()=>setSelectedSub(s.id)}>
+            <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
               <span><strong>{s.name}</strong><small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small></span>
               <ChevronRight size={18}/>
             </button>
@@ -547,7 +547,7 @@ function App(){
           </button>)}
         </div>:<div className="search-empty"><Search size={24}/><h3>Nenhum alimento encontrado</h3><p>Tente outro nome ou limpe a busca para ver seus locais.</p><button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button></div>}</>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
           {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
-            {places.map(p=><div className="place-card" key={p.id} role="button" tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' ')openPlace(p.id)}}>
+            {places.map(p=><div className="place-card" key={p.id} role="button" tabIndex={0} onClick={()=>openPlace(p.id)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}>
               <div className="place-top">
                 <div className="place-icon"><Box size={21}/></div>
                 <div className="place-card-actions">
