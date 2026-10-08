@@ -85,6 +85,7 @@ function App(){
   const[userId,setUserId]=useState<string|null>(null);
   const[user,setUser]=useState<any>(null);
   const[synced,setSynced]=useState(false);
+  const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
   const[authModal,setAuthModal]=useState(false);
@@ -159,6 +160,19 @@ function App(){
   },[]);
 
   useEffect(()=>{localStorage.setItem('organizapp',JSON.stringify(places))},[places]);
+
+  useEffect(()=>{
+    const updateOnline=()=>setOnline(navigator.onLine);
+    window.addEventListener('online',updateOnline);
+    window.addEventListener('offline',updateOnline);
+    return()=>{window.removeEventListener('online',updateOnline);window.removeEventListener('offline',updateOnline)};
+  },[]);
+
+  useEffect(()=>{
+    if(!authMessage)return;
+    const timer=window.setTimeout(()=>setAuthMessage(null),6000);
+    return()=>window.clearTimeout(timer);
+  },[authMessage]);
 
   function rememberFood(name:string,unit:Unit){
     setRecentFoods(prev=>{
@@ -506,7 +520,7 @@ function App(){
             <div>
               <p className="eyebrow">LOCAL</p>
               <h2>{current?.name}</h2>
-              <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'} <span className="sync-status">{synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
+              <p>{current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)||0} {current?.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'} <span className="sync-status">{!online?'Sem internet · dados locais':synced?'Sincronizado':'Somente neste dispositivo'}</span></p>
             </div>
           </div>
           <button className="primary location-add" onClick={()=>selectedSub&&setFoodModal({place:selected,sub:selectedSub})} disabled={!selectedSub}><Plus size={18}/> Adicionar alimento</button>
