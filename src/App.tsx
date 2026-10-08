@@ -14,6 +14,7 @@ const recentFoodsKey='organizapp-recent-foods';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const searchKey=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const formatQuantity=(quantity:number,unit:Unit)=>unit==='unidades'?quantity+' '+(quantity===1?'unidade':'unidades'):quantity+' '+unit;
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
 const initial:Place[]=[
   {id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},
@@ -41,7 +42,7 @@ function normalize(raw:any):Place[]{
   }));
 }
 
-function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(v)}
+function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)}
 function readLocalPlaces(){
   try{return normalize(JSON.parse(localStorage.getItem('organizapp')||'null'))}catch{return initial}
 }
@@ -136,9 +137,9 @@ function App(){
       if(active&&request===authRequest.current)setSynced(true);
     };
     load();
-    const{data:listener}=supabase.auth.onAuthStateChange(async(_event,session)=>{
+    const{data:listener}=supabase.auth.onAuthStateChange((_event,session)=>{
       if(!active)return;
-      const request=++authRequest.current;
+      ++authRequest.current;
       if(!session?.user){
         setUser(null);
         setUserId(null);
@@ -148,15 +149,6 @@ function App(){
       }
       setUser(session.user);
       setUserId(session.user.id);
-      const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
-      if(!active||request!==authRequest.current)return;
-      if(error){
-        setSynced(false);
-        setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
-        return;
-      }
-      setPlaces(mapCloudPlaces(data||[]));
-      setSynced(true);
     });
     return()=>{active=false;listener.subscription.unsubscribe()};
   },[]);
@@ -209,7 +201,20 @@ function App(){
         if(data.user&&data.session&&local.length){
           try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Conta criada, mas não foi possível sincronizar os dados locais ainda.')}
         }
-        setAuthMessage(data.session?'Conta criada e dados sincronizados.':'Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
+        if(data.session&&data.user){
+          const request=++authRequest.current;
+          const{data:cloudData,error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+          if(request===authRequest.current&&cloudError){
+            setSynced(false);
+            setAuthMessage('Conta criada, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
+          }else if(request===authRequest.current){
+            setPlaces(mapCloudPlaces(cloudData||[]));
+            setSynced(true);
+            setAuthMessage('Conta criada e dados sincronizados.');
+          }
+        }else{
+          setAuthMessage('Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
+        }
         if(data.session)setAuthModal(false);
       }else{
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
@@ -220,8 +225,19 @@ function App(){
             try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Login realizado, mas não foi possível concluir a sincronização dos dados locais.')}
           }
         }
+        const request=++authRequest.current;
+        const{data:cloudData, error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+        if(request===authRequest.current){
+          if(cloudError){
+            setSynced(false);
+            setAuthMessage('Login realizado, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
+          }else{
+            setPlaces(mapCloudPlaces(cloudData||[]));
+            setSynced(true);
+            setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+          }
+        }
         setAuthModal(false);
-        setAuthMessage('Login realizado. Seus dados estão sincronizados.');
       }
     }finally{setAuthBusy(false)}
   }
@@ -249,7 +265,13 @@ function App(){
   const results=useMemo(()=>{
     const q=searchKey(search.trim());
     if(!q)return[];
-    return places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>searchKey(f.name).includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))));
+    const found=places.flatMap(p=>p.subdivisions.flatMap(s=>s.foods.filter(f=>searchKey(f.name).includes(q)).map(f=>({...f,place:p.name,sub:s.name,placeId:p.id,subId:s.id}))));
+    return found.sort((a,b)=>{
+      const an=searchKey(a.name),bn=searchKey(b.name);
+      const ar=an===q?0:an.startsWith(q)?1:2;
+      const br=bn===q?0:bn.startsWith(q)?1:2;
+      return ar-br||an.localeCompare(bn,'pt-BR');
+    });
   },[search,places]);
 
   async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){
@@ -495,7 +517,7 @@ function App(){
         {search?<><div className="search-results-head"><div><p className="eyebrow">RESULTADOS</p><h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3></div></div>{results.length?<div className="results">
           {results.map(r=><button className="result" key={r.id} onClick={()=>openSearchResult(r.placeId,r.subId)}>
             <Apple size={18}/>
-            <span><strong>{r.name}</strong><small>{r.quantity===0?'Sem estoque':r.quantity+' '+r.unit} · {r.place} · {r.sub}</small></span>
+            <span><strong>{r.name}</strong><small>{r.quantity===0?'Sem estoque':formatQuantity(r.quantity,r.unit)} · {r.place} · {r.sub}</small></span>
             <ChevronRight size={17}/>
           </button>)}
         </div>:<div className="search-empty"><Search size={24}/><h3>Nenhum alimento encontrado</h3><p>Tente outro nome ou limpe a busca para ver seus locais.</p><button className="primary" onClick={()=>setSearch('')}>Ver meus locais</button></div>}</>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
@@ -565,7 +587,7 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
     </div>}
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
-    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {quantity} {unit}</button>}{duplicateFood&&duplicateFood.unit!==unit&&<small>As unidades são diferentes ({duplicateFood.unit} e {unit}), então mantenha como itens separados.</small>}</div>}
+    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {formatQuantity(quantity,unit)}</button>}{duplicateFood&&duplicateFood.unit!==unit&&<small>As unidades são diferentes ({duplicateFood.unit} e {unit}), então mantenha como itens separados.</small>}</div>}
     <div className="row">
       <label>Quantidade<div className="number"><button type="button" aria-label="Diminuir quantidade" onClick={()=>setQuantity(Math.max(0,Number((quantity-quantityStep).toFixed(3))))}><Minus/></button><input type="number" min="0" step={quantityStep} value={quantity} onChange={e=>{const value=Number(e.target.value);setQuantity(Number.isFinite(value)?Math.max(0,value):0)}} aria-label="Quantidade" /><button type="button" aria-label="Aumentar quantidade" onClick={()=>setQuantity(Number((quantity+quantityStep).toFixed(3)))}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
@@ -576,7 +598,7 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
 
 function MoveModal({data,places,onClose,onMove}:{data:{place:string;sub:string;food:Food};places:Place[];onClose:()=>void;onMove:(fromPlaceId:string,fromSubId:string,foodId:string,toPlaceId:string,toSubId:string)=>void}){
   return <Modal title="Mover alimento" onClose={onClose}>
-    <div className="move-current"><span>Movendo</span><strong>{data.food.name}</strong><small>{data.food.quantity} {data.food.unit} · {places.find(p=>p.id===data.place)?.name} · {places.find(p=>p.id===data.place)?.subdivisions.find(s=>s.id===data.sub)?.name}</small></div>
+    <div className="move-current"><span>Movendo</span><strong>{data.food.name}</strong><small>{formatQuantity(data.food.quantity,data.food.unit)} · {places.find(p=>p.id===data.place)?.name} · {places.find(p=>p.id===data.place)?.subdivisions.find(s=>s.id===data.sub)?.name}</small></div>
     <p className="modal-help move-help">Escolha o novo destino.</p>
     <div className="move-list">
       {places.map(p=><div className="move-place" key={p.id}>
