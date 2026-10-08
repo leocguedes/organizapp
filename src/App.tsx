@@ -503,7 +503,7 @@ function App(){
               </div>}
             </div>
           </div>)}
-        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>}</>:null}</>
+        </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/>}</>:null}
       </section>:<section>
         <div className="hero">
           <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre o que precisa.</h2><p>Veja onde cada alimento está e mantenha sua casa organizada sem esforço.</p></div>
