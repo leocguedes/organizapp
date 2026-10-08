@@ -222,3 +222,5 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   .qty-unit{display:none}
   .search-empty{padding:44px 18px}
 }
+
+.password-mismatch{margin:-5px 0 12px;color:#b45b55;font-size:11px}
