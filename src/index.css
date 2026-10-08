@@ -247,3 +247,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .manage-empty .no-places-icon{margin:0 0 9px}
 .manage-empty strong{font-size:13px;color:#4b5c51}
 .manage-empty span{margin-top:3px;color:#8b968f;font-size:11px}
+
+/* Device-level polish */
+html{background:#f5f7f2}
+body{min-height:100dvh;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;-webkit-tap-highlight-color:transparent}
+button,input,select{-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
