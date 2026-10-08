@@ -213,6 +213,19 @@ function App(){
   const undoTimer=useRef<number|null>(null);
   const authRequest=useRef(0);
 
+  function clearTransientUi(){
+    setSelected(null);
+    setSelectedSub(null);
+    setSearch('');
+    setFoodModal(null);
+    setMoveModal(null);
+    setFoodMenu(null);
+    setPlaceModal(false);
+    setPlaceToEdit(null);
+    setSubModal(null);
+    setUndo(null);
+  }
+
   useEffect(()=>{
     let active=true;
     const load=async()=>{
@@ -278,7 +291,11 @@ function App(){
       if(!active)return;
       if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED'){
         ++authRequest.current;
-        if(event==='SIGNED_IN'&&session?.user)setCacheReady(false);
+        if(event==='SIGNED_IN'&&session?.user){
+          clearTransientUi();
+          setCacheReady(false);
+        }
+        if(event==='SIGNED_OUT')clearTransientUi();
       }
       if(event==='PASSWORD_RECOVERY'){
         setPasswordRecovery(true);
@@ -327,6 +344,7 @@ function App(){
     }
     const cloudPlaces=mapCloudPlaces(data||[]);
     setPlaces(cloudPlaces);
+    writeLocalPlaces(userIdToLoad,cloudPlaces);
     setSynced(true);
   }
 
