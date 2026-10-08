@@ -459,17 +459,16 @@ function App(){
         </div>:<Empty title={'Nenhum alimento em '+sub.name} text="Adicione os alimentos que ficam nesta subdivisão." action={()=>setFoodModal({place:selected,sub:selectedSub})}/></div>:null}</>
       </section>:<section>
         <div className="hero">
-          <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre tudo em um instante.</h2><p>Organize seus alimentos por onde eles ficam e mantenha tudo sob controle sem complicação.</p></div>
-          <div className="total"><span>{total}</span><small>{total===1?'alimento':'alimentos'}</small><em>{places.length} {places.length===1?'local':'locais'}</em></div>
+          <div className="hero-copy"><p className="eyebrow">SUA CASA</p><h2>Encontre o que precisa.</h2><p>Veja onde cada alimento está e mantenha sua casa organizada sem esforço.</p></div>
         </div>
-        <div className="search">
-          <Search size={19}/><input aria-label="Buscar alimento" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar alimento..."/>
-          {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
+        <div className="home-tools">
+          <div className="search">
+            <Search size={19}/><input aria-label="Buscar alimento" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Onde está o seu alimento?"/>
+            {search&&<button onClick={()=>setSearch('')} aria-label="Limpar busca"><X size={17}/></button>}
+          </div>
+          {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
         </div>
-        {!search&&<button className="home-add" onClick={openAddFoodFromHome}><span className="home-add-icon"><Plus size={20}/></span><span><strong>{places.length?'Adicionar alimento':'Criar primeiro local'}</strong><small>{places.length?'Registre algo novo na sua casa':'Escolha onde seus alimentos ficam'}</small></span><ChevronRight size={18}/></button>}
-        {search?<div className="results">{results.length?results.map(f=><button className="result" key={f.id} onClick={()=>{openPlace(f.placeId);setSelectedSub(f.subId);setSearch('')}}>
-          <Box size={18}/><span><strong>{f.name}</strong><small>{f.place} · {f.sub} · {f.quantity} {f.unit}</small></span><ChevronRight size={16}/>
-        </button>):<Empty title="Nenhum alimento encontrado" text="Tente buscar por outro nome."/>}</div>:<><div className="section-title"><h3>Seus locais</h3><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
+        {search?<div className="search-results-head"><div><p className="eyebrow">RESULTADOS</p><h3>{results.length} {results.length===1?'alimento encontrado':'alimentos encontrados'}</h3></div></div>:<><div className="section-title"><div><h3>Seus locais</h3><p className="section-caption">{total} {total===1?'alimento':'alimentos'} em {places.length} {places.length===1?'local':'locais'}</p></div><button onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={17}/> Novo local</button></div>
           {places.length===0?<div className="no-places"><div className="no-places-icon"><Box size={22}/></div><h3>Comece pelo primeiro local</h3><p>Crie uma geladeira, despensa ou outro lugar para começar a organizar seus alimentos.</p><button className="primary" onClick={()=>{setPlaceToEdit(null);setPlaceModal(true)}}><Plus size={18}/> Criar primeiro local</button></div>:<div className="places">
             {places.map(p=><div className="place-card" key={p.id} onClick={()=>openPlace(p.id)}>
               <div className="place-top">
@@ -480,7 +479,7 @@ function App(){
                 </div>
               </div>
               <h3>{p.name}</h3>
-              <p>{p.subdivisions.length} {p.subdivisions.length===1?'subdivisão':'subdivisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} itens</p>
+              <p>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}</p>
             </div>)}
           </div>
         </>}
