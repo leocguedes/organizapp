@@ -396,13 +396,25 @@ function App(){
   }
 
   async function removePlace(id:string){
+    const removed=places.find(p=>p.id===id);
+    if(!removed)return;
     const snapshot=places;
+    const index=places.findIndex(p=>p.id===id);
     setPlaces(ps=>ps.filter(p=>p.id!==id));
     if(userId){
       const{error}=await supabase.from('locations').delete().eq('id',id);
-      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');}
+      if(error){setPlaces(snapshot);syncError('Não foi possível excluir o local.');return}
     }
     if(selected===id){setSelected(null);setSelectedSub(null)}
+    offerUndo('Local removido',()=>{
+      setPlaces(ps=>{
+        if(ps.some(p=>p.id===removed.id))return ps;
+        const next=[...ps];
+        next.splice(Math.min(index,next.length),0,removed);
+        return next;
+      });
+      if(userId)uploadLocal(userId,[removed]).catch(()=>syncError('O local foi restaurado neste dispositivo, mas a sincronização falhou.'));
+    });
   }
 
   async function saveSub(placeId:string,name:string,id?:string){
@@ -420,13 +432,25 @@ function App(){
   }
 
   async function removeSub(placeId:string,id:string){
+    const removed=places.find(p=>p.id===placeId)?.subdivisions.find(s=>s.id===id);
+    if(!removed)return;
     const snapshot=places;
+    const index=places.find(p=>p.id===placeId)?.subdivisions.findIndex(s=>s.id===id)??-1;
     setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.filter(s=>s.id!==id)}));
     if(userId){
       const{error}=await supabase.from('subdivisions').delete().eq('id',id);
       if(error){setPlaces(snapshot);syncError('Não foi possível excluir a subdivisão.');return}
     }
     if(selectedSub===id)setSelectedSub(null);
+    offerUndo('Divisão removida',()=>{
+      setPlaces(ps=>ps.map(p=>{
+        if(p.id!==placeId||p.subdivisions.some(s=>s.id===removed.id))return p;
+        const next=[...p.subdivisions];
+        next.splice(Math.min(Math.max(index,0),next.length),0,removed);
+        return{...p,subdivisions:next};
+      }));
+      if(userId)supabase.from('subdivisions').upsert({id:removed.id,user_id:userId,location_id:placeId,name:removed.name}).catch(()=>syncError('A divisão foi restaurada neste dispositivo, mas a sincronização falhou.'));
+    });
   }
 
   function openPlace(id:string){
@@ -540,7 +564,7 @@ function App(){
     </main>
     {foodModal&&<FoodModal data={foodModal.food} placeId={foodModal.place} subId={foodModal.sub} places={places} recentFoods={recentFoods} onClose={()=>setFoodModal(null)} onSave={(placeId,subId,d)=>saveFood(placeId,subId,d,foodModal.food?.id)} onAddToExisting={(placeId,subId,existingId,amount,unit)=>addToExistingFood(placeId,subId,existingId,amount,unit)}/>
     {moveModal&&<MoveModal data={moveModal} places={places} onClose={()=>setMoveModal(null)} onMove={moveFood}/>}
-    {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={removePlace}/>}
+    {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{await removePlace(id);setPlaceModal(false);setPlaceToEdit(null)}}/>}
     {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
     {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
     {undo&&<div className="undo-toast"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
