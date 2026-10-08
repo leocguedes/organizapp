@@ -115,3 +115,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }
+
+
+.food.out-of-stock{background:#fcfaf7;border-color:#e9e4db}
+.food.out-of-stock .food-icon{background:#f2eee7;color:#9a8f80}
+.food.out-of-stock .food-name strong{color:#756b5f}
+.food.out-of-stock .food-name span{color:#a18f7a;font-weight:600}
