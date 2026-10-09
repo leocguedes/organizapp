@@ -13,9 +13,10 @@ type ConsumptionRule={id:string;household_id:string;food_id:string;amount:number
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type Household={id:string;name:string;created_by:string;is_personal:boolean;role:'owner'|'admin'|'member'};
-type ShoppingItem={id:string;household_id:string;name:string;quantity:number;unit:string;category?:string|null;is_purchased:boolean;source:string;linked_food_id?:string|null;notes?:string|null;created_by:string;purchased_by?:string|null;purchased_at?:string|null;created_at?:string};
+type ShoppingItem={id:string;household_id:string;name:string;quantity:number;unit:string;category?:string|null;is_purchased:boolean;source:string;linked_food_id?:string|null;notes?:string|null;created_by:string;purchased_by?:string|null;purchased_at?:string|null;created_at?:string;recurring_rule_id?:string|null;recurring_occurrence?:string|null};
+type RecurringShoppingRule={id:string;household_id:string;name:string;quantity:number;unit:string;frequency_days:number;next_due_on:string;is_active:boolean;created_by:string;created_at?:string;};
 type UndoState={label:string;action:()=>void};
-type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items'|'food_consumption_rules'|'food_consumption_events';
+type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items'|'recurring_shopping_items'|'food_consumption_rules'|'food_consumption_events';
 type SyncAction='upsert'|'update'|'delete';
 type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
@@ -347,6 +348,8 @@ function App(){
   const[householdCopied,setHouseholdCopied]=useState(false);
   const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'>('inventory');
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
+  const[recurringRules,setRecurringRules]=useState<RecurringShoppingRule[]>([]);
+  const[recurringRuleBusy,setRecurringRuleBusy]=useState(false);
   const shoppingItemsRef=useRef<ShoppingItem[]>([]);
   const[shoppingLoading,setShoppingLoading]=useState(false);
   const[shoppingStockItem,setShoppingStockItem]=useState<ShoppingItem|null>(null);
@@ -540,6 +543,22 @@ function App(){
       }finally{
         if(active)setShoppingLoading(false);
       }
+    })();
+    return()=>{active=false};
+  },[userId,householdId]);
+
+  useEffect(()=>{
+    if(!userId||!householdId){
+      setRecurringRules([]);
+      return;
+    }
+    let active=true;
+    void (async()=>{
+      const{data,error}=await supabase.from('recurring_shopping_items').select('*')
+        .eq('household_id',householdId)
+        .order('next_due_on',{ascending:true});
+      if(!active)return;
+      if(!error)setRecurringRules((data||[]).map((item:any)=>({...item,quantity:Number(item.quantity)||0,frequency_days:Number(item.frequency_days)||7})));
     })();
     return()=>{active=false};
   },[userId,householdId]);
