@@ -30,13 +30,13 @@ begin
         and s.id <> canonical_subdivision_id
     );
 
-    update public.subdivisions
-    set name = 'Geral'
-    where id = canonical_subdivision_id;
-
     delete from public.subdivisions
     where location_id = location_row.id
       and id <> canonical_subdivision_id;
+
+    update public.subdivisions
+    set name = 'Geral'
+    where id = canonical_subdivision_id;
   end loop;
 end;
 $$;
