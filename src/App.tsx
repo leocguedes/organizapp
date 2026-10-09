@@ -753,19 +753,6 @@ function App(){
     },350);
   }
 
-  useEffect(()=>{
-    if(!userId)return;
-    const refresh=()=>{
-      if(navigator.onLine)void refreshCloud(userId);
-    };
-    window.addEventListener('focus',refresh);
-    window.addEventListener('online',refresh);
-    return()=>{
-      window.removeEventListener('focus',refresh);
-      window.removeEventListener('online',refresh);
-    };
-  },[userId,householdId]);
-
   function rememberFood(name:string,unit:Unit){
     setRecentFoods(prev=>{
       const key=searchKey(name.trim());
@@ -991,6 +978,7 @@ function App(){
       name:rule.name,quantity:rule.quantity,unit:rule.unit,frequency_days:rule.frequency_days,next_due_on:rule.next_due_on,is_active:true
     }:rule as unknown as Record<string,unknown>});
     if(!ok)syncError('Reposição recorrente salva localmente; será sincronizada quando a conexão voltar.');
+    else if(rule.next_due_on<=localDateString())void refreshShoppingList(userId,householdId);
     setRecurringRuleBusy(false);
   }
 
