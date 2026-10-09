@@ -373,6 +373,7 @@ function App(){
   const[undo,setUndo]=useState<UndoState|null>(null);
   const undoTimer=useRef<number|null>(null);
   const authRequest=useRef(0);
+  const realtimeRefreshTimer=useRef<number|null>(null);
 
   function clearTransientUi(){
     setSelected(null);
@@ -649,6 +650,107 @@ function App(){
       setSynced(false);
       setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
     }
+  }
+
+  async function refreshShoppingList(targetUser=userId,targetHouse=householdId){
+    if(!targetUser||!targetHouse||targetUser!==userId||targetHouse!==householdId||!navigator.onLine)return;
+    const request=authRequest.current;
+    const{error:recurringError}=await supabase.rpc('materialize_due_recurring_shopping_items',{target_household_id:targetHouse});
+    if(request!==authRequest.current||targetUser!==userId||targetHouse!==householdId)return;
+    const{data,error}=await supabase.from('shopping_items').select('*')
+      .eq('household_id',targetHouse)
+      .order('is_purchased',{ascending:true})
+      .order('created_at',{ascending:false});
+    if(request!==authRequest.current||targetUser!==userId||targetHouse!==householdId)return;
+    if(error){
+      setAuthMessage('A lista de compras está em cache; a sincronização será retomada quando estiver disponível.');
+      return;
+    }
+    const items=mapShoppingItems(data||[]);
+    shoppingItemsRef.current=items;
+    setShoppingItems(items);
+    writeShoppingCache(targetUser,targetHouse,items);
+    if(recurringError)setAuthMessage('A lista atualizou, mas não foi possível processar todas as reposições recorrentes.');
+  }
+
+  async function refreshRecurringRules(targetUser=userId,targetHouse=householdId){
+    if(!targetUser||!targetHouse||targetUser!==userId||targetHouse!==householdId)return;
+    const{data,error}=await supabase.from('recurring_shopping_items').select('*')
+      .eq('household_id',targetHouse).order('next_due_on',{ascending:true});
+    if(error||targetUser!==userId||targetHouse!==householdId)return;
+    setRecurringRules((data||[]).map((item:any)=>({...item,quantity:Number(item.quantity)||0,frequency_days:Number(item.frequency_days)||7})));
+  }
+
+  async function refreshConsumptionRules(targetUser=userId,targetHouse=householdId){
+    if(!targetUser||!targetHouse||targetUser!==userId||targetHouse!==householdId)return;
+    const{data,error}=await supabase.from('food_consumption_rules').select('*')
+      .eq('household_id',targetHouse).eq('is_active',true).order('next_suggestion_on',{ascending:true});
+    if(error||targetUser!==userId||targetHouse!==householdId)return;
+    setConsumptionRules((data||[]) as ConsumptionRule[]);
+  }
+
+  useEffect(()=>{
+    if(!userId||!householdId)return;
+    const activeUser=userId;
+    const activeHouse=householdId;
+    const refresh=()=>{
+      if(!navigator.onLine)return;
+      void refreshCloud(activeUser);
+      void refreshShoppingList(activeUser,activeHouse);
+      void refreshRecurringRules(activeUser,activeHouse);
+      void refreshConsumptionRules(activeUser,activeHouse);
+    };
+    window.addEventListener('focus',refresh);
+    window.addEventListener('online',refresh);
+    return()=>{
+      window.removeEventListener('focus',refresh);
+      window.removeEventListener('online',refresh);
+    };
+  },[userId,householdId]);
+
+  useEffect(()=>{
+    if(!userId||!householdId)return;
+    const activeUser=userId;
+    const activeHouse=householdId;
+    const channel=supabase.channel('household-live-'+activeHouse)
+      .on('postgres_changes',{event:'*',schema:'public',table:'locations',filter:'household_id=eq.'+activeHouse},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'subdivisions'},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'foods'},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'shopping_items',filter:'household_id=eq.'+activeHouse},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'recurring_shopping_items',filter:'household_id=eq.'+activeHouse},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'food_consumption_rules',filter:'household_id=eq.'+activeHouse},()=>{
+        scheduleHouseholdRefresh(activeUser,activeHouse);
+      })
+      .subscribe();
+    return()=>{
+      if(realtimeRefreshTimer.current!==null){
+        window.clearTimeout(realtimeRefreshTimer.current);
+        realtimeRefreshTimer.current=null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  },[userId,householdId]);
+
+  function scheduleHouseholdRefresh(targetUser:string,targetHouse:string){
+    if(realtimeRefreshTimer.current!==null)window.clearTimeout(realtimeRefreshTimer.current);
+    realtimeRefreshTimer.current=window.setTimeout(()=>{
+      realtimeRefreshTimer.current=null;
+      if(targetUser!==userId||targetHouse!==householdId||!navigator.onLine)return;
+      void refreshCloud(targetUser);
+      void refreshShoppingList(targetUser,targetHouse);
+      void refreshRecurringRules(targetUser,targetHouse);
+      void refreshConsumptionRules(targetUser,targetHouse);
+    },350);
   }
 
   useEffect(()=>{
