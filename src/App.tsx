@@ -4,7 +4,7 @@ import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
 import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
 import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
-import{BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{Apple,BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
