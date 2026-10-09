@@ -859,7 +859,7 @@ function App(){
     const next=id?places.map(p=>p.id===id?{...p,name:clean}:p):[...places,{id:placeId,name:clean,subdivisions:[newSub!]}];
     setPlaces(next);
     if(userId){
-      const locationOk=await writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:placeId,data:{id:placeId,user_id:userId,name:clean}});
+      const locationOk=await writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:placeId,data:{id:placeId,user_id:userId,name:clean,...(householdId?{household_id:householdId}:{})}});
       if(!locationOk)syncError('Local salvo neste dispositivo. Ele será sincronizado quando a conexão voltar.');
       if(newSub){
         const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:newSub.id,data:{id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name}});
@@ -891,7 +891,7 @@ function App(){
       });
       if(userId){
         for(const p of [removed]){
-          void writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:p.id,data:{id:p.id,user_id:userId,name:p.name}}).then(async ok=>{
+          void writeOrQueue(userId,{userId,table:'locations',action:'upsert',rowId:p.id,data:{id:p.id,user_id:userId,name:p.name,...(householdId?{household_id:householdId}:{})}}).then(async ok=>{
             if(!ok){syncError('O local foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.');return}
             for(const s of p.subdivisions){
               const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:s.id,data:{id:s.id,user_id:userId,location_id:p.id,name:s.name}});
