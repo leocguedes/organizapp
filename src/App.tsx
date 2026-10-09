@@ -454,9 +454,44 @@ function App(){
             setSynced(false);
             setAuthMessage('Conta criada, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
           }else if(request===authRequest.current){
-            setPlaces(mapCloudPlaces(cloudData||[]));
-            setSynced(true);
-            setAuthMessage('Conta criada e dados sincronizados.');
+            const cloudPlaces=mapCloudPlaces(cloudData||[]);
+            if(!previousOwner&&local.length){
+              setPlaces(local);
+              writeLocalPlaces(data.user.id,local);
+              try{
+                await uploadLocal(data.user.id,local);
+                if(request!==authRequest.current)return;
+                setSynced(true);
+                setAuthMessage('Conta criada e dados sincronizados.');
+              }catch{
+                if(request!==authRequest.current)return;
+                setSynced(false);
+                setAuthMessage('Conta criada. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
+              }
+              setCacheReady(true);
+            }else if(cloudPlaces.length){
+              setPlaces(cloudPlaces);
+              writeLocalPlaces(data.user.id,cloudPlaces);
+              setSynced(true);
+              setCacheReady(true);
+              setAuthMessage('Conta criada e dados sincronizados.');
+            }else{
+              const accountCache=readStoredPlaces(userLocalKey(data.user.id));
+              const fallback=accountCache?.length?accountCache:readLocalPlaces(data.user.id);
+              setPlaces(fallback);
+              writeLocalPlaces(data.user.id,fallback);
+              try{
+                await uploadLocal(data.user.id,fallback);
+                if(request!==authRequest.current)return;
+                setSynced(true);
+                setAuthMessage('Conta criada e dados sincronizados.');
+              }catch{
+                if(request!==authRequest.current)return;
+                setSynced(false);
+                setAuthMessage('Conta criada. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
+              }
+              setCacheReady(true);
+            }
           }
         }else{
           setAuthMessage('Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
