@@ -1144,7 +1144,7 @@ function App(){
     const duplicate=currentItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
     if(duplicate){
       const nextQuantity=Number((duplicate.quantity+quantity).toFixed(3));
-      const next=currentItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source}:item);
+      const next=currentItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source,...(notes?{notes}:{})}:item);
       persistShopping(next);
       const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity,...(source!=='manual'?{source}:{}),...(notes?{notes}:{})}});
       if(!ok)syncError('Quantidade atualizada na lista deste dispositivo; será sincronizada quando a conexão voltar.');
