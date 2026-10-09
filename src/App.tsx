@@ -386,6 +386,9 @@ function App(){
     setPlaceModal(false);
     setPlaceToEdit(null);
     setSubModal(null);
+    setShoppingStockItem(null);
+    setConsumptionRuleModal(null);
+    setCookConfirmRecipe(null);
     setUndo(null);
   }
 
@@ -558,6 +561,8 @@ function App(){
     }
     let active=true;
     void (async()=>{
+      await supabase.rpc('materialize_due_recurring_shopping_items',{target_household_id:householdId});
+      if(!active)return;
       const{data,error}=await supabase.from('recurring_shopping_items').select('*')
         .eq('household_id',householdId)
         .order('next_due_on',{ascending:true});
@@ -978,7 +983,10 @@ function App(){
       name:rule.name,quantity:rule.quantity,unit:rule.unit,frequency_days:rule.frequency_days,next_due_on:rule.next_due_on,is_active:true
     }:rule as unknown as Record<string,unknown>});
     if(!ok)syncError('Reposição recorrente salva localmente; será sincronizada quando a conexão voltar.');
-    else if(rule.next_due_on<=localDateString())void refreshShoppingList(userId,householdId);
+    else if(rule.next_due_on<=localDateString()){
+      void refreshShoppingList(userId,householdId);
+      void refreshRecurringRules(userId,householdId);
+    }
     setRecurringRuleBusy(false);
   }
 
@@ -1144,7 +1152,7 @@ function App(){
   }
 
   async function addPurchasedShoppingToStock(item:ShoppingItem,placeId:string,subId:string,expiresOn:string|null){
-    if(!userId||!householdId||!item.is_purchased)return;
+    if(!userId||!householdId||item.household_id!==householdId||!item.is_purchased)return;
     const targetPlace=places.find(place=>place.id===placeId);
     const targetSub=targetPlace?.subdivisions.find(subdivision=>subdivision.id===subId);
     if(!targetPlace||!targetSub)return;
@@ -1904,7 +1912,7 @@ function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(i
             <div className="recipe-ingredients"><strong>Ingredientes</strong>
               {statuses.map(status=><div className="recipe-ingredient" key={status.ingredient.name}>
                 <span className={'recipe-ingredient-icon '+(status.enough===true?'available':status.enough===false?'missing':'unknown')}>{status.enough===true?'✓':status.enough===false?'!':'?'}</span>
-                <div><strong>{status.ingredient.name}</strong><small>{formatQuantity(status.ingredient.quantity,status.ingredient.unit)}{status.enough===true?' · disponível':status.enough===false?' · falta '+formatQuantity(status.missingQuantity,status.ingredient.unit):' · confira a unidade'}{status.expiredMatches.length>0?' · só há item vencido':''}</small></div>
+                <div><strong>{status.ingredient.name}</strong><small>{formatQuantity(status.ingredient.quantity,status.ingredient.unit)}{status.enough===true?' · disponível':status.enough===false?' · falta '+formatQuantity(status.missingQuantity,status.ingredient.unit):' · confira a unidade'}{status.expiredMatches.length>0?(status.matches.length?' · também há item vencido':' · só há item vencido'):''}</small></div>
               </div>)}
             </div>
             <div className="recipe-steps"><strong>Modo de preparo</strong><ol>{recipe.instructions.map((step,index)=><li key={index}>{step}</li>)}</ol></div>
