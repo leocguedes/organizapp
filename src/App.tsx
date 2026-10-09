@@ -280,10 +280,13 @@ function App(){
       }
       const cloudPlaces=mapCloudPlaces(data||[]);
       const accountCache=readStoredPlaces(userLocalKey(current.id));
-      if(cloudPlaces.length===0&&accountCache?.length){
-        setPlaces(accountCache);
+      const legacyAccountCache=getLocalOwner()===current.id?readStoredPlaces(legacyLocalKey):null;
+      const recoveryCache=accountCache?.length?accountCache:legacyAccountCache;
+      if(cloudPlaces.length===0&&recoveryCache?.length){
+        setPlaces(recoveryCache);
+        writeLocalPlaces(current.id,recoveryCache);
         try{
-          await uploadLocal(current.id,accountCache);
+          await uploadLocal(current.id,recoveryCache);
           if(!active||request!==authRequest.current)return;
           setSynced(true);
         }catch{
