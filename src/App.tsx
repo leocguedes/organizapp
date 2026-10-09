@@ -1534,11 +1534,16 @@ function App(){
             items={shoppingItems}
             loading={shoppingLoading}
             signedIn={!!userId&&!!householdId}
+            recurringRules={recurringRules}
+            recurringBusy={recurringRuleBusy}
             onAdd={addShoppingItem}
             onToggle={toggleShoppingItem}
             onDelete={deleteShoppingItem}
             onStock={item=>setShoppingStockItem(item)}
             onSignIn={()=>setAuthModal(true)}
+            onSaveRecurring={saveRecurringRule}
+            onToggleRecurring={toggleRecurringRule}
+            onDeleteRecurring={deleteRecurringRule}
           />
         ):workspace==='recipes'?(
           <RecipePage places={places} onAddMissing={addRecipeMissing} onCook={recipe=>setCookConfirmRecipe(recipe)}/>
@@ -1860,10 +1865,16 @@ function ConsumptionRuleModal({food,rule,onClose,onSave,onDelete}:{food?:Food;ru
   </Modal>
 }
 
-function ShoppingPage({items,loading,signedIn,onAdd,onToggle,onDelete,onStock,onSignIn}:{items:ShoppingItem[];loading:boolean;signedIn:boolean;onAdd:(name:string,quantity:number,unit:Unit)=>void;onToggle:(item:ShoppingItem)=>void;onDelete:(item:ShoppingItem)=>void;onStock:(item:ShoppingItem)=>void;onSignIn:()=>void}){
+function ShoppingPage({items,loading,signedIn,recurringRules,recurringBusy,onAdd,onToggle,onDelete,onStock,onSignIn,onSaveRecurring,onToggleRecurring,onDeleteRecurring}:{items:ShoppingItem[];loading:boolean;signedIn:boolean;recurringRules:RecurringShoppingRule[];recurringBusy:boolean;onAdd:(name:string,quantity:number,unit:Unit)=>void;onToggle:(item:ShoppingItem)=>void;onDelete:(item:ShoppingItem)=>void;onStock:(item:ShoppingItem)=>void;onSignIn:()=>void;onSaveRecurring:(input:{name:string;quantity:number;unit:Unit;frequencyDays:number;nextDueOn:string;id?:string})=>void;onToggleRecurring:(rule:RecurringShoppingRule)=>void;onDeleteRecurring:(rule:RecurringShoppingRule)=>void}){
   const[name,setName]=useState('');
   const[quantity,setQuantity]=useState(1);
   const[unit,setUnit]=useState<Unit>('unidades');
+  const[recurringName,setRecurringName]=useState('');
+  const[recurringQuantity,setRecurringQuantity]=useState(1);
+  const[recurringUnit,setRecurringUnit]=useState<Unit>('unidades');
+  const[recurringFrequency,setRecurringFrequency]=useState(7);
+  const[recurringNextDue,setRecurringNextDue]=useState(localDateString());
+  const[editingRecurringId,setEditingRecurringId]=useState<string|undefined>();
   const pending=items.filter(item=>!item.is_purchased);
   const purchased=items.filter(item=>item.is_purchased);
   const submit=(event:{preventDefault:()=>void})=>{
@@ -1874,6 +1885,30 @@ function ShoppingPage({items,loading,signedIn,onAdd,onToggle,onDelete,onStock,on
     setName('');
     setQuantity(1);
     setUnit('unidades');
+  };
+  const resetRecurringForm=()=>{
+    setRecurringName('');
+    setRecurringQuantity(1);
+    setRecurringUnit('unidades');
+    setRecurringFrequency(7);
+    setRecurringNextDue(localDateString());
+    setEditingRecurringId(undefined);
+  };
+  const submitRecurring=(event:{preventDefault:()=>void})=>{
+    event.preventDefault();
+    if(!signedIn){onSignIn();return}
+    if(!recurringName.trim()||!Number.isFinite(recurringQuantity)||recurringQuantity<=0||!Number.isInteger(recurringFrequency)||recurringFrequency<1||recurringFrequency>365)return;
+    onSaveRecurring({name:recurringName,quantity:recurringQuantity,unit:recurringUnit,frequencyDays:recurringFrequency,nextDueOn:recurringNextDue||localDateString(),id:editingRecurringId});
+    resetRecurringForm();
+  };
+  const editRecurring=(rule:RecurringShoppingRule)=>{
+    setRecurringName(rule.name);
+    setRecurringQuantity(rule.quantity);
+    setRecurringUnit(units.includes(rule.unit as Unit)?rule.unit as Unit:'unidades');
+    setRecurringFrequency(rule.frequency_days);
+    setRecurringNextDue(rule.next_due_on);
+    setEditingRecurringId(rule.id);
+    document.getElementById('recurring-shopping-form')?.scrollIntoView({behavior:'smooth',block:'center'});
   };
   return <section className="shopping-page">
     <div className="hero shopping-hero">
@@ -1901,6 +1936,32 @@ function ShoppingPage({items,loading,signedIn,onAdd,onToggle,onDelete,onStock,on
           <button className="primary shopping-add-button" type="submit" disabled={!name.trim()||!Number.isFinite(quantity)||quantity<=0||loading}><Plus size={17}/> Adicionar</button>
         </div>
       </form>
+      <details className="recurring-panel">
+        <summary><span><strong>Reposições recorrentes</strong><small>Repor itens em intervalos definidos</small></span><b>{recurringRules.filter(rule=>rule.is_active).length}</b></summary>
+        <form id="recurring-shopping-form" className="recurring-form" onSubmit={submitRecurring}>
+          <strong>{editingRecurringId?'Editar reposição':'Criar uma reposição programada'}</strong>
+          <label>Produto<input value={recurringName} onChange={e=>setRecurringName(e.target.value)} placeholder="Ex.: Leite integral" maxLength={120}/></label>
+          <div className="recurring-form-row">
+            <label>Quantidade<input type="number" min="0.01" step={recurringUnit==='kg'||recurringUnit==='L'?0.1:1} value={recurringQuantity} onChange={e=>setRecurringQuantity(Number(e.target.value))}/></label>
+            <label>Unidade<select value={recurringUnit} onChange={e=>setRecurringUnit(e.target.value as Unit)}>{units.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          </div>
+          <div className="recurring-form-row">
+            <label>Repetir a cada (dias)<input type="number" min="1" max="365" step="1" value={recurringFrequency} onChange={e=>setRecurringFrequency(Number(e.target.value))}/></label>
+            <label>Próxima sugestão<input type="date" value={recurringNextDue} onChange={e=>setRecurringNextDue(e.target.value)}/></label>
+          </div>
+          <div className="recurring-form-actions">
+            <button className="primary" type="submit" disabled={recurringBusy||!recurringName.trim()||!Number.isFinite(recurringQuantity)||recurringQuantity<=0||!Number.isInteger(recurringFrequency)||recurringFrequency<1||recurringFrequency>365}>{recurringBusy?'Salvando…':editingRecurringId?'Salvar alteração':'Programar reposição'}</button>
+            {editingRecurringId&&<button className="secondary-action" type="button" onClick={resetRecurringForm}>Cancelar</button>}
+          </div>
+          <small className="recurring-note">Quando a data chegar, o item entra uma vez na lista compartilhada e a próxima data é calculada automaticamente.</small>
+        </form>
+        {recurringRules.length>0?<div className="recurring-rules">
+          {recurringRules.map(rule=><div className={'recurring-rule '+(!rule.is_active?'inactive':'')} key={rule.id}>
+            <div className="recurring-rule-copy"><strong>{rule.name}</strong><small>{formatQuantity(rule.quantity,units.includes(rule.unit as Unit)?rule.unit as Unit:'unidades')} · a cada {rule.frequency_days} {rule.frequency_days===1?'dia':'dias'}</small><small>{rule.is_active?'Próxima sugestão: '+rule.next_due_on:'Pausada'}</small></div>
+            <div className="recurring-rule-actions"><button type="button" onClick={()=>editRecurring(rule)}>Editar</button><button type="button" onClick={()=>onToggleRecurring(rule)}>{rule.is_active?'Pausar':'Ativar'}</button><button type="button" onClick={()=>onDeleteRecurring(rule)} aria-label={'Excluir regra de '+rule.name}><Trash2 size={15}/></button></div>
+          </div>)}
+        </div>:<p className="recurring-empty">Nenhuma reposição programada. Crie uma rotina, como leite toda semana ou café todo mês.</p>}
+      </details>
       <div className="shopping-section-heading">
         <div><h3>Para comprar</h3><p>{pending.length?pending.length+(pending.length===1?' item aguardando':' itens aguardando'):'Tudo comprado por enquanto'}</p></div>
         {loading&&<span className="shopping-loading">Sincronizando…</span>}
