@@ -175,9 +175,9 @@ function writeRecentFoods(userId:string|null,foods:RecentFood[]){
   }catch{}
 }
 
-async function uploadLocal(userId:string,places:Place[]){
+async function uploadLocal(userId:string,places:Place[],householdId?:string){
   for(const p of places){
-    const{error:placeError}=await supabase.from('locations').upsert({id:p.id,user_id:userId,name:p.name});
+    const{error:placeError}=await supabase.from('locations').upsert({id:p.id,user_id:userId,name:p.name,...(householdId?{household_id:householdId}:{})});
     if(placeError)throw placeError;
     for(const s of p.subdivisions){
       const{error:subError}=await supabase.from('subdivisions').upsert({id:s.id,user_id:userId,location_id:p.id,name:s.name});
