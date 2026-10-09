@@ -334,10 +334,13 @@ function App(){
   },[authMessage]);
 
   async function refreshCloud(userIdToLoad=userId){
-    if(!userIdToLoad)return;
+    if(!userIdToLoad||userIdToLoad!==userId)return;
+    const request=authRequest.current;
     const pendingOk=await flushPendingSync(userIdToLoad);
+    if(request!==authRequest.current||userIdToLoad!==userId)return;
     if(!pendingOk){setSynced(false);return}
     const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+    if(request!==authRequest.current||userIdToLoad!==userId)return;
     if(error){
       setSynced(false);
       return;
