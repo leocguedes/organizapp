@@ -670,3 +670,10 @@ button{touch-action:manipulation}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+
+/* Minimal food rows; locations use an emoji without a decorative tile. */
+.food{gap:14px}
+.location-icon,.place-icon{width:auto;height:auto;min-width:0;min-height:0;border-radius:0;background:transparent;color:inherit;display:flex;align-items:center;justify-content:center;line-height:1;flex:0 0 auto}
+.location-icon{font-size:34px}
+.place-icon{font-size:28px}
