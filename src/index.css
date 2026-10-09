@@ -261,3 +261,27 @@ header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur
 .no-subdivisions span{font-size:11px;line-height:1.4;color:#8a958e}
 .no-subdivisions .primary{white-space:nowrap}
 @media(max-width:460px){.no-subdivisions{align-items:flex-start}.no-subdivisions .primary{font-size:11px;padding:9px 10px}}
+
+
+/* Household sharing */
+.family-btn{display:inline-flex;align-items:center;gap:7px;max-width:220px}
+.family-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:145px}
+.household-panel,.household-join{border:1px solid #e1e8df;background:#f8faf6;border-radius:14px;padding:14px;margin:14px 0}
+.household-panel-heading{display:flex;align-items:center;gap:8px;color:#4f7157}
+.household-panel-heading strong{font-size:14px;color:#3e5145}
+.household-panel p,.household-join p{margin:7px 0 13px;color:#7e8b82;font-size:12px;line-height:1.5}
+.household-invite{margin-top:12px;padding:12px;background:#edf4eb;border:1px solid #d5e2d2;border-radius:11px}
+.household-invite>span{display:block;color:#758579;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px}
+.household-invite>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.household-invite strong{font-size:22px;letter-spacing:.14em;color:#35563c;overflow-wrap:anywhere}
+.household-invite button{border:1px solid #c8d9c5;background:#fffdf9;color:#4c6b53;border-radius:9px;padding:8px 10px;display:flex;align-items:center;gap:6px;cursor:pointer;font:600 11px 'DM Sans',sans-serif;flex:0 0 auto}
+.household-invite small{display:block;margin-top:8px;color:#758579;font-size:10px}
+.household-note{font-size:11px;color:#8b7761!important}
+.household-join{background:#fffdf9}
+.household-join>strong{font-size:13px;color:#46584c}
+.household-join label{margin-top:12px}
+@media(max-width:460px){
+  .family-btn{width:38px;height:38px;padding:0;justify-content:center;flex:0 0 38px}
+  .family-btn span{display:none}
+  .household-invite strong{font-size:18px}
+}
