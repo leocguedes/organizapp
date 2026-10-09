@@ -410,17 +410,15 @@ function App(){
     load();
     const{data:listener}=supabase.auth.onAuthStateChange((event,session)=>{
       if(!active)return;
-      if(event==='SIGNED_IN'||event==='SIGNED_OUT'||event==='USER_UPDATED'){
-        ++authRequest.current;
-        if(event==='SIGNED_IN'&&session?.user){
-          clearTransientUi();
-          setCacheReady(false);
-          setRecentFoods(readRecentFoods(session.user.id));
-        }
-        if(event==='SIGNED_OUT'){
-          clearTransientUi();
-          setRecentFoods(readRecentFoods(null));
-        }
+      if(event==='SIGNED_OUT'||event==='USER_UPDATED')++authRequest.current;
+      if(event==='SIGNED_IN'&&session?.user){
+        clearTransientUi();
+        setCacheReady(false);
+        setRecentFoods(readRecentFoods(session.user.id));
+      }
+      if(event==='SIGNED_OUT'){
+        clearTransientUi();
+        setRecentFoods(readRecentFoods(null));
       }
       if(event==='PASSWORD_RECOVERY'){
         setPasswordRecovery(true);
