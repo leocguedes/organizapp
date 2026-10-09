@@ -491,3 +491,182 @@ header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur
   .recurring-rule-actions{width:100%}
   .recurring-rule-actions button{flex:1}
 }
+
+
+/* Premium, calm and practical visual system */
+:root{
+  color-scheme:light;
+  --canvas:#f6f7f2;
+  --surface:#fffefa;
+  --surface-soft:#f0f4ed;
+  --ink:#26372c;
+  --muted:#78857b;
+  --line:#e3e8df;
+  --green:#45694e;
+  --green-deep:#34543d;
+  --green-soft:#e8f0e5;
+  --radius-card:20px;
+  --shadow-card:0 5px 18px rgba(37,55,39,.045);
+  --shadow-hover:0 12px 28px rgba(37,55,39,.085);
+}
+html,body{background:var(--canvas);color:var(--ink)}
+body{font-size:14px;line-height:1.5}
+::selection{background:#dce9d7;color:#26372c}
+:focus-visible{outline:3px solid #b9d0b5;outline-offset:3px}
+header{height:72px;border-bottom-color:rgba(220,228,217,.85);box-shadow:0 2px 12px rgba(39,54,40,.025)}
+.brand{gap:11px}
+.logo{background:linear-gradient(145deg,#e8f0e4,#dce8d8);color:var(--green);border:1px solid #d7e4d4;border-radius:14px}
+.brand h1{letter-spacing:-.035em;font-size:18px;color:#2d4032}
+.brand span{letter-spacing:.01em}
+.header-actions{gap:8px}
+.sync-btn{border:1px solid var(--line);background:var(--surface);color:#52675a;border-radius:12px;padding:10px 13px;font:600 12px 'DM Sans',sans-serif;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
+.sync-btn:hover{background:#f1f5ee;border-color:#cbd9c8}
+.sync-btn:disabled{opacity:.55;cursor:wait}
+main{max-width:1160px;padding:38px 24px 76px}
+.hero{margin-bottom:28px}
+.hero h2,h2{font-size:clamp(29px,3.3vw,38px);letter-spacing:-.045em;line-height:1.08;color:#2a3c30}
+.hero p:not(.eyebrow){font-size:14px;line-height:1.65;color:#78857b}
+.eyebrow{font-size:10px;letter-spacing:.15em;color:#68836c;margin-bottom:9px}
+.workspace-nav{gap:4px;padding:5px;border-radius:15px;background:#eaf0e6;border-color:#dfe7dc;margin-bottom:30px}
+.workspace-nav button{min-height:42px;padding:10px 16px;border-radius:11px;font-size:13px;transition:background .18s,color .18s,box-shadow .18s}
+.workspace-nav button.active{background:var(--surface);color:var(--green-deep);box-shadow:0 2px 8px rgba(38,55,39,.07)}
+.workspace-nav button:hover:not(.active){background:rgba(255,255,255,.5);color:#3e6046}
+.workspace-nav button span{background:#dce8d8;color:#3f6247}
+.search{height:54px;border-radius:16px;border-color:#e0e7dc;box-shadow:0 3px 12px rgba(37,55,39,.035);margin-bottom:22px;padding:0 17px}
+.search:focus-within{border-color:#9bb69a;box-shadow:0 0 0 4px rgba(189,211,184,.24)}
+.search input{font-size:14px;color:var(--ink)}
+.search input::placeholder{color:#a0aaa1}
+.home-tools{gap:12px}
+.home-add{border:1px solid #dfe8dc;background:linear-gradient(110deg,#fffefa,#f7faf4);border-radius:16px;padding:15px 16px;box-shadow:var(--shadow-card);transition:transform .18s,border-color .18s,box-shadow .18s}
+.home-add:hover{transform:translateY(-1px);border-color:#c8d9c5;box-shadow:var(--shadow-hover)}
+.home-add-icon{background:#e6efe2;color:#456b4e;border-radius:12px}
+.home-add strong{font-size:13px;color:#344b39}
+.home-add small{font-size:11px;line-height:1.5;color:#859187}
+.section-title{margin:30px 0 15px;align-items:flex-end}
+.section-title h3,.sub-head h3{font-size:19px;letter-spacing:-.025em;color:#304335}
+.section-caption{font-size:12px;color:#879288;margin:4px 0 0}
+.section-title button,.sub-head button,.back{font-size:12px}
+.places{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.place-card{position:relative;overflow:hidden;min-height:158px;padding:21px;border-radius:var(--radius-card);background:var(--surface);border-color:#e3e9e0;box-shadow:var(--shadow-card);transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.place-card:after{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:linear-gradient(90deg,#9ab69a,#d8e5d2);opacity:0;transition:opacity .2s}
+.place-card:hover,.place-card:focus-visible{transform:translateY(-3px);border-color:#cdddc9;box-shadow:var(--shadow-hover)}
+.place-card:hover:after,.place-card:focus-visible:after{opacity:1}
+.place-icon{width:46px;height:46px;border-radius:15px;background:#edf3e9;color:#58785e}
+.place-card h3{margin:22px 0 5px;font-size:17px;letter-spacing:-.025em;color:#344638}
+.place-card p{font-size:12px;color:#89958a}
+.card-edit{border-radius:10px}
+.card-edit:hover{background:#edf3e9;color:#45694e}
+.arrow{font-size:18px;color:#9baa9d}
+.primary{min-height:42px;padding:11px 16px;border-radius:12px;background:var(--green);box-shadow:0 2px 4px rgba(36,70,43,.08);font:600 13px 'DM Sans',sans-serif;transition:background .18s,transform .18s,box-shadow .18s}
+.primary:hover{background:var(--green-deep);box-shadow:0 5px 12px rgba(36,70,43,.14);transform:translateY(-1px)}
+.primary:active{transform:translateY(0)}
+.secondary-action,.tertiary-action{border-radius:10px;font-size:11px;min-height:36px}
+.food-list{gap:10px}
+.food{min-height:76px;padding:13px 14px;gap:13px;border-radius:15px;border-color:#e4e9e1;box-shadow:0 2px 8px rgba(37,55,39,.025);transition:border-color .18s,box-shadow .18s}
+.food:hover{border-color:#d0decd;box-shadow:0 4px 13px rgba(37,55,39,.05)}
+.food-icon{width:42px;height:42px;border-radius:13px;background:#edf3e9;color:#5c7c61}
+.food-name strong{font-size:14px;color:#344638;letter-spacing:-.01em}
+.food-name span{font-size:11px;color:#879288}
+.qty{gap:8px}
+.qty button,.number button{width:32px;height:32px;border-radius:10px;border-color:#e0e7dc;background:#f8faf6;color:#526b57;transition:background .15s,border-color .15s}
+.qty button:hover,.number button:hover{background:#eaf2e6;border-color:#c8d9c5}
+.qty b{font-size:13px;color:#354a39}
+.expiry-label{border-radius:7px;padding:4px 8px;font-size:10px;letter-spacing:.005em}
+.expiry-label.urgent{background:#fff2dc;color:#8f6b32}
+.expiry-label.expired{background:#fae9e6;color:#a44e47}
+.consumption-panel,.expiry-panel{padding:20px;border-radius:var(--radius-card);box-shadow:var(--shadow-card);border-color:#e3e9df}
+.smart-panel-heading h3{font-size:18px;letter-spacing:-.025em}
+.smart-panel-heading p:not(.eyebrow){font-size:12px;line-height:1.6}
+.smart-suggestion{padding:15px;border-radius:14px;background:#fbfcf9;border-color:#e5ebe2}
+.smart-suggestion-copy>strong{font-size:14px}
+.smart-suggestion-copy>small,.smart-suggestion-copy>p{font-size:11px;line-height:1.55}
+.expiry-item{padding:12px;border-radius:13px}
+.expiry-item-copy strong{font-size:13px}
+.modal{border:1px solid rgba(222,230,218,.9);border-radius:23px;padding:25px;box-shadow:0 24px 70px rgba(31,45,33,.2)}
+.modal-head{margin-bottom:22px}
+.modal-head h2{font-size:27px;letter-spacing:-.04em}
+.modal label{font-size:12px;color:#536458;gap:7px}
+.modal input,.modal select,.modal textarea{border-color:#dfe6dc;border-radius:11px;min-height:43px;font:13px 'DM Sans',sans-serif}
+.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:#92b090;box-shadow:0 0 0 3px rgba(189,211,184,.25);outline:0}
+.overlay{background:rgba(28,42,31,.48);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.shopping-add-form,.recurring-panel,.recipe-card{border-radius:var(--radius-card);border-color:#e3e9df;box-shadow:var(--shadow-card)}
+.shopping-add-form{padding:21px 21px 3px}
+.shopping-form-heading strong{font-size:15px;letter-spacing:-.015em}
+.shopping-add-form label,.recurring-form label{font-size:11px;color:#596b5e}
+.shopping-add-form input,.shopping-add-form select,.recurring-form input,.recurring-form select{height:44px;border-color:#e0e7dc;border-radius:11px;font-size:13px}
+.shopping-add-form input:focus,.shopping-add-form select:focus,.recurring-form input:focus,.recurring-form select:focus{border-color:#92b090;box-shadow:0 0 0 3px rgba(189,211,184,.24);outline:0}
+.shopping-section-heading h3{font-size:19px;letter-spacing:-.025em}
+.shopping-section-heading p{font-size:12px}
+.shopping-row{min-height:72px;padding:12px 14px;border-radius:14px;border-color:#e3e9e0;box-shadow:0 2px 7px rgba(37,55,39,.025);transition:border-color .18s,background .18s}
+.shopping-row:hover{border-color:#d1dfcd}
+.shopping-row-name strong{font-size:14px;color:#35483a}
+.shopping-row-name small{font-size:11px}
+.shopping-checkmark{width:21px;height:21px;border-radius:7px}
+.shopping-empty,.shopping-empty,.no-places{border-radius:var(--radius-card);background:var(--surface);border-color:#dce6d9}
+.shopping-empty{padding:40px 22px;gap:10px}
+.shopping-empty strong{font-size:15px}
+.shopping-empty span{font-size:12px;line-height:1.6}
+.recipe-grid{gap:16px}
+.recipe-card{padding:20px;transition:transform .18s,border-color .18s,box-shadow .18s}
+.recipe-card:hover{transform:translateY(-2px);border-color:#d2dfce;box-shadow:var(--shadow-hover)}
+.recipe-card h3{font-size:19px;letter-spacing:-.03em;color:#344638}
+.recipe-description{font-size:12px;line-height:1.6;color:#7f8b81}
+.recipe-meta{font-size:11px}
+.recipe-hint{border:1px solid #f0e4ce;border-radius:10px;font-size:11px;line-height:1.55}
+.recipe-status{border-radius:9px;font-size:10px}
+.empty h3,.no-places h3{font-size:18px;letter-spacing:-.025em;color:#35483a}
+.empty p,.no-places p{font-size:12px;line-height:1.65;color:#7d8a80}
+.no-places{padding:34px 22px;border:1px dashed #d2dfcf}
+.search-empty{border-radius:var(--radius-card);background:var(--surface);border-color:#e0e8dc}
+.back{color:#55765c}
+.back:hover{color:#34543d}
+.result{min-height:68px;border-radius:14px;border-color:#e2e9df;padding:14px 15px;transition:border-color .18s,transform .18s,box-shadow .18s}
+.result:hover{border-color:#ccddc8;transform:translateY(-1px);box-shadow:var(--shadow-card)}
+.result strong{font-size:13px;color:#35483a}
+.result small{font-size:11px}
+.manage-empty{border-radius:15px;background:#f8faf6}
+.household-panel,.household-join{border-radius:16px}
+.household-panel-heading strong,.household-join>strong{color:#34483a}
+button,input,select,textarea{font-family:'DM Sans',sans-serif}
+button{touch-action:manipulation}
+@media(max-width:760px){
+  main{padding:28px 18px 60px}
+  .places{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .place-card{padding:17px;min-height:148px}
+  .hero{margin-bottom:23px}
+  .workspace-nav{margin-bottom:24px}
+}
+@media(max-width:600px){
+  header{height:66px;padding-left:16px;padding-right:16px}
+  main{padding:23px 14px 48px}
+  .hero h2,h2{font-size:30px}
+  .workspace-nav{gap:3px;padding:4px;border-radius:13px}
+  .workspace-nav button{font-size:12px;gap:6px;padding:9px 7px;min-height:40px}
+  .places{gap:10px}
+  .place-card{padding:14px;border-radius:16px;min-height:135px}
+  .place-icon{width:40px;height:40px;border-radius:12px}
+  .place-card h3{margin-top:17px;font-size:15px}
+  .place-card p{font-size:11px}
+  .section-title{margin-top:25px}
+  .search{height:50px}
+  .home-add{padding:13px;border-radius:14px}
+  .food{gap:9px;padding:10px;border-radius:13px}
+  .food-icon{width:36px;height:36px;border-radius:11px}
+  .food-name strong{font-size:13px}
+  .qty{gap:5px}
+  .qty button{width:29px;height:29px}
+  .consumption-panel,.expiry-panel{padding:14px;border-radius:16px}
+  .modal{padding:20px;border-radius:20px}
+  .shopping-add-form{padding:15px 14px 1px;border-radius:16px}
+  .shopping-row{border-radius:12px}
+  .recipe-card{padding:15px;border-radius:16px}
+}
+@media(max-width:380px){
+  .places{grid-template-columns:1fr}
+  .place-card{min-height:120px}
+  .place-card h3{margin-top:14px}
+  .workspace-nav button{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
