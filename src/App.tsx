@@ -60,30 +60,27 @@ function expiryCaption(dateText:string){
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
 const initial:Place[]=[
-  {id:uid(),name:'Geladeira',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo'),makeSub('Gaveta de legumes'),makeSub('Porta')]},
-  {id:uid(),name:'Freezer',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},
-  {id:uid(),name:'Armário',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]},
-  {id:uid(),name:'Gavetas',subdivisions:[makeSub('Gaveta de cima'),makeSub('Gaveta de baixo')]},
-  {id:uid(),name:'Despensa',subdivisions:[makeSub('Prateleira de cima'),makeSub('Prateleira de baixo')]}
+  {id:uid(),name:'Geladeira',subdivisions:[makeSub('Geral')]},
+  {id:uid(),name:'Freezer',subdivisions:[makeSub('Geral')]},
+  {id:uid(),name:'Armário',subdivisions:[makeSub('Geral')]},
+  {id:uid(),name:'Gavetas',subdivisions:[makeSub('Geral')]},
+  {id:uid(),name:'Despensa',subdivisions:[makeSub('Geral')]}
 ];
 
 function normalize(raw:any):Place[]{
   if(!Array.isArray(raw))return initial;
-  return raw.map((p:any)=>({
-    id:isUUID(p.id)?p.id:uid(),
-    name:String(p.name??'').trim(),
-    subdivisions:(p.subdivisions?.length?p.subdivisions:[{id:uid(),name:'Geral',foods:p.foods||[]}]).map((s:any)=>({
-      id:isUUID(s.id)?s.id:uid(),
-      name:String(s.name??'Geral').trim(),
-      foods:(s.foods||[]).map((f:any)=>({
-        id:isUUID(f.id)?f.id:uid(),
-        name:String(f.name??'').trim(),
-        quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
-        unit:units.includes(f.unit)?f.unit:'unidades',
-        expires_on:typeof f.expires_on==='string'?f.expires_on:null
-      }))
-    }))
-  })).filter((p:Place)=>p.name||p.subdivisions.length);
+  return raw.map((p:any)=>{
+    const oldSubs=Array.isArray(p.subdivisions)?p.subdivisions:[];
+    const first=oldSubs[0];
+    const foods=[...(p.foods||[]),...oldSubs.flatMap((sub:any)=>sub.foods||[])].map((f:any)=>({
+      id:isUUID(f.id)?f.id:uid(),
+      name:String(f.name??'').trim(),
+      quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
+      unit:units.includes(f.unit)?f.unit:'unidades',
+      expires_on:typeof f.expires_on==='string'?f.expires_on:null
+    }));
+    return {id:isUUID(p.id)?p.id:uid(),name:String(p.name??'').trim(),subdivisions:[{id:isUUID(first?.id)?first.id:uid(),name:'Geral',foods}]};
+  }).filter((p:Place)=>p.name);
 }
 
 function isUUID(v:any){return typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)}
@@ -336,21 +333,16 @@ async function writeOrQueue(userId:string,operation:Omit<PendingOperation,'id'>)
 }
 
 function mapCloudPlaces(data:any[]):Place[]{
-  return(data||[]).map((p:any)=>({
-    id:isUUID(p.id)?p.id:uid(),
-    name:String(p.name??'').trim(),
-    subdivisions:(p.subdivisions||[]).filter(Boolean).map((s:any)=>({
-      id:isUUID(s.id)?s.id:uid(),
-      name:String(s.name??'Geral').trim(),
-      foods:(s.foods||[]).filter(Boolean).map((f:any)=>({
-        id:isUUID(f.id)?f.id:uid(),
-        name:String(f.name??'').trim(),
-        quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
-        unit:units.includes(f.unit)?f.unit:'unidades',
-        expires_on:typeof f.expires_on==='string'?f.expires_on:null
-      }))
-    }))
-  }));
+  return(data||[]).map((p:any)=>{
+    const oldSubs=(p.subdivisions||[]).filter(Boolean);
+    const first=oldSubs[0];
+    const foods=oldSubs.flatMap((sub:any)=>(sub.foods||[]).filter(Boolean)).map((f:any)=>({
+      id:isUUID(f.id)?f.id:uid(),name:String(f.name??'').trim(),
+      quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
+      unit:units.includes(f.unit)?f.unit:'unidades',expires_on:typeof f.expires_on==='string'?f.expires_on:null
+    }));
+    return {id:isUUID(p.id)?p.id:uid(),name:String(p.name??'').trim(),subdivisions:[{id:isUUID(first?.id)?first.id:uid(),name:'Geral',foods}]};
+  });
 }
 
 function App(){
@@ -1562,46 +1554,8 @@ function App(){
               </button>
             </div>
 
-            <div className="sub-head">
-              <div>
-                <h3>Divisões</h3>
-                <p>Escolha onde quer guardar ou encontrar seus alimentos.</p>
-              </div>
-              <button onClick={()=>setSubModal({place:selected})}><Plus size={17}/> Nova divisão</button>
-            </div>
-
-            {current?.subdivisions.length?(
-              <div className="sub-list">
-                {current.subdivisions.map(s=>(
-                  <div className={'sub-card '+(s.id===selectedSub?'active':'')} key={s.id}>
-                    <button className="sub-select" aria-pressed={s.id===selectedSub} onClick={()=>setSelectedSub(s.id)}>
-                      <span>
-                        <strong>{s.name}</strong>
-                        <small>{s.foods.length} {s.foods.length===1?'alimento':'alimentos'}</small>
-                      </span>
-                      <ChevronRight size={18}/>
-                    </button>
-                    <button className="sub-edit" title="Renomear divisão" aria-label={'Renomear '+s.name} onClick={()=>setSubModal({place:selected!,sub:s})}>
-                      <Edit3 size={16}/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ):(
-              <div className="no-subdivisions">
-                <div className="no-subdivisions-icon"><Box size={20}/></div>
-                <div><strong>Nenhuma divisão criada</strong><span>Crie a primeira para começar a guardar seus alimentos.</span></div>
-                <button className="primary" onClick={()=>setSubModal({place:selected!})}><Plus size={17}/> Criar divisão</button>
-              </div>
-            )}
-
             {selectedSub&&sub?(
               <>
-                <div className="selected-sub-head">
-                  <div><span className="eyebrow">DIVISÃO</span><h3>{sub.name}</h3></div>
-                  <span>{sub.foods.length} {sub.foods.length===1?'alimento':'alimentos'}</span>
-                </div>
-
                 {sub.foods.length?(
                   <div className="food-list">
                     {sub.foods.map(f=>(
@@ -1640,8 +1594,8 @@ function App(){
                   </div>
                 ):(
                   <Empty
-                    title={'Nenhum alimento em '+sub.name}
-                    text="Adicione os alimentos que ficam nesta subdivisão."
+                    title={'Nenhum alimento na '+(current?.name||'local')}
+                    text="Adicione os alimentos que ficam neste local."
                     action={()=>setFoodModal({place:selected,sub:selectedSub})}
                   />
                 )}
@@ -1701,7 +1655,7 @@ function App(){
                   const useAmount=Math.min(food.quantity,rule.amount);
                   const nextQuantity=Math.max(0,Number((food.quantity-useAmount).toFixed(3)));
                   return <article key={rule.id} className="smart-suggestion">
-                    <div className="smart-suggestion-copy"><strong>{food.name}</strong><small>{place.name} · {subdivision.name} · previsto: {formatQuantity(rule.amount,food.unit)} a cada {rule.period_days} dias</small><p>Estoque atual: {formatQuantity(food.quantity,food.unit)}. Confirmando, ficará com {formatQuantity(nextQuantity,food.unit)}.</p></div>
+                    <div className="smart-suggestion-copy"><strong>{food.name}</strong><small>{place.name} · previsto: {formatQuantity(rule.amount,food.unit)} a cada {rule.period_days} dias</small><p>Estoque atual: {formatQuantity(food.quantity,food.unit)}. Confirmando, ficará com {formatQuantity(nextQuantity,food.unit)}.</p></div>
                     <div className="smart-suggestion-actions">
                       <button className="primary" onClick={()=>void handleConsumptionSuggestion(rule,true)}>Confirmar consumo</button>
                       <button className="secondary-action" onClick={()=>void handleConsumptionSuggestion(rule,false)}>Adiar</button>
@@ -1716,7 +1670,7 @@ function App(){
               <div className="smart-panel-heading"><div><p className="eyebrow">REDUZA O DESPERDÍCIO</p><h3>Validade próxima</h3><p>Itens vencidos ou que vencem nos próximos 7 dias.</p></div><span>{expiringFoods.length}</span></div>
               <div className="expiry-items">
                 {expiringFoods.slice(0,5).map(({food,place,subdivision,days})=><div className="expiry-item" key={food.id}>
-                  <div className="expiry-item-copy"><strong>{food.name}</strong><small>{formatQuantity(food.quantity,food.unit)} · {place.name} · {subdivision.name}</small></div>
+                  <div className="expiry-item-copy"><strong>{food.name}</strong><small>{formatQuantity(food.quantity,food.unit)} · {place.name}</small></div>
                   <span className={'expiry-label '+(days<0?'expired':days<=3?'urgent':'')}>{expiryCaption(food.expires_on!)}</span>
                   <button type="button" className="tertiary-action" onClick={()=>openSearchResult(place.id,subdivision.id)}>Ver</button>
                 </div>)}
@@ -1739,7 +1693,7 @@ function App(){
                         <Apple size={18}/>
                         <span>
                           <strong>{r.name}</strong>
-                          <small>{r.quantity===0?'Sem estoque':formatQuantity(r.quantity,r.unit)} · {r.place} · {r.sub}</small>
+                          <small>{r.quantity===0?'Sem estoque':formatQuantity(r.quantity,r.unit)} · {r.place}</small>
                         </span>
                         <ChevronRight size={17}/>
                       </button>
@@ -1793,7 +1747,7 @@ function App(){
                           </div>
                         </div>
                         <h3>{p.name}</h3>
-                        <p>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'} · {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}</p>
+                        <p>{p.subdivisions.reduce((n,s)=>n+s.foods.length,0)} {p.subdivisions.reduce((n,s)=>n+s.foods.length,0)===1?'alimento':'alimentos'}</p>
                       </div>
                     ))}
                   </div>
@@ -2111,22 +2065,20 @@ function ShoppingRow({item,onToggle,onDelete,onStock}:{item:ShoppingItem;onToggl
 
 function ShoppingStockModal({item,places,onClose,onConfirm}:{item:ShoppingItem;places:Place[];onConfirm:(item:ShoppingItem,placeId:string,subId:string,expiresOn:string|null)=>void;onClose:()=>void}){
   const[placeId,setPlaceId]=useState(places[0]?.id||'');
-  const[subId,setSubId]=useState(places[0]?.subdivisions[0]?.id||'');
   const[expiresOn,setExpiresOn]=useState('');
   const place=places.find(p=>p.id===placeId);
-  const availableSub=place?.subdivisions.find(s=>s.id===subId);
+  const destination=place?.subdivisions[0];
   const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
   return <Modal title="Adicionar ao estoque" onClose={onClose}>
     <div className="move-current"><span>Compra concluída</span><strong>{item.name}</strong><small>{formatQuantity(item.quantity,unit)}</small></div>
     {places.length?<>
       <p className="modal-help">Escolha onde guardar o que você comprou.</p>
-      <label>Local<select value={placeId} onChange={e=>{const next=e.target.value;setPlaceId(next);setSubId(places.find(p=>p.id===next)?.subdivisions[0]?.id||'')}}>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      <label>Divisão<select value={subId} disabled={!place} onChange={e=>setSubId(e.target.value)}>{place?.subdivisions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <label>Local<select value={placeId} onChange={e=>setPlaceId(e.target.value)}>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       <label>Validade (opcional)<input type="date" value={expiresOn} onChange={e=>setExpiresOn(e.target.value)}/></label>
-      {availableSub?.foods.some(f=>searchKey(f.name)===searchKey(item.name)&&f.unit===unit&&(f.expires_on||'')===expiresOn)&&<p className="modal-help">Esse alimento já existe nesta divisão com a mesma validade. A quantidade será somada ao estoque atual.</p>}
-      <button className="primary full" disabled={!place||!availableSub} onClick={()=>onConfirm(item,placeId,subId,expiresOn||null)}>Adicionar {formatQuantity(item.quantity,unit)}</button>
+      {destination?.foods.some(f=>searchKey(f.name)===searchKey(item.name)&&f.unit===unit&&(f.expires_on||'')===expiresOn)&&<p className="modal-help">Esse alimento já existe neste local com a mesma validade. A quantidade será somada ao estoque atual.</p>}
+      <button className="primary full" disabled={!place||!destination} onClick={()=>onConfirm(item,placeId,destination!.id,expiresOn||null)}>Adicionar {formatQuantity(item.quantity,unit)}</button>
     </>:<>
-      <p className="modal-help">Crie um local e uma divisão antes de adicionar esta compra ao estoque.</p>
+      <p className="modal-help">Crie um local antes de adicionar esta compra ao estoque.</p>
       <button className="primary full" onClick={onClose}>Fechar</button>
     </>}
   </Modal>
@@ -2169,9 +2121,10 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
   const[expiresOn,setExpiresOn]=useState(data?.expires_on||'');
   const[chosenPlace,setChosenPlace]=useState(placeId);
-  const[chosenSub,setChosenSub]=useState(subId);
+  const[chosenSub,setChosenSub]=useState(subId||places.find(p=>p.id===placeId)?.subdivisions[0]?.id||'');
   const currentPlace=places.find(p=>p.id===chosenPlace);
-  const existingFoods=currentPlace?.subdivisions.find(s=>s.id===chosenSub)?.foods||[];
+  const destination=currentPlace?.subdivisions[0];
+  const existingFoods=destination?.foods||[];
   const duplicateFood=existingFoods.find(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim())&&f.unit===unit&&(f.expires_on||'')===expiresOn);
   const duplicate=!!duplicateFood;
   const quantityStep=unit==='kg'||unit==='L'?0.1:1;
@@ -2179,40 +2132,40 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
   const canMerge=!!duplicateFood&&duplicateFood.unit===unit&&quantity>0;
   return <Modal title={data?'Editar alimento':'Novo alimento'} onClose={onClose}>
     {!data&&<div className="destination-fields">
-      <div className="destination-title"><span>Onde ele fica?</span><small>Escolha o local e a subdivisão.</small></div>
+      <div className="destination-title"><span>Onde ele fica?</span><small>Escolha o local.</small></div>
       <div className="row">
-        <label>Local<select value={chosenPlace} onChange={e=>{setChosenPlace(e.target.value);setChosenSub(places.find(p=>p.id===e.target.value)?.subdivisions[0]?.id||'')}}><option value="">Selecione...</option>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label>Subdivisão<select value={chosenSub} disabled={!chosenPlace} onChange={e=>setChosenSub(e.target.value)}><option value="">Selecione...</option>{currentPlace?.subdivisions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        <label>Local<select value={chosenPlace} onChange={e=>{const nextPlace=places.find(p=>p.id===e.target.value);setChosenPlace(e.target.value);setChosenSub(nextPlace?.subdivisions[0]?.id||'')}}><option value="">Selecione...</option>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       </div>
     </div>}
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
-    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {formatQuantity(quantity,unit)}</button>}</div>}
+    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está neste local.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {formatQuantity(quantity,unit)}</button>}</div>}
     <label>Validade (opcional)<input type="date" value={expiresOn} onChange={e=>setExpiresOn(e.target.value)} aria-label="Data de validade do alimento"/><small className="field-help">Se houver várias embalagens com datas diferentes, cadastre cada lote separadamente.</small></label>
     <div className="row">
       <label>Quantidade<div className="number"><button type="button" aria-label="Diminuir quantidade" onClick={()=>setQuantity(Math.max(0,Number((quantity-quantityStep).toFixed(3))))}><Minus/></button><input type="number" min="0" step={quantityStep} value={quantity} onChange={e=>{const value=Number(e.target.value);setQuantity(Number.isFinite(value)?Math.max(0,value):0)}} aria-label="Quantidade" /><button type="button" aria-label="Aumentar quantidade" onClick={()=>setQuantity(Number((quantity+quantityStep).toFixed(3)))}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
     </div>
-    <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,chosenSub,{name:name.trim(),quantity,unit,expires_on:expiresOn||null})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
+    <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,currentPlace?.subdivisions[0]?.id||chosenSub,{name:name.trim(),quantity,unit,expires_on:expiresOn||null})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
   </Modal>
 }
 
 function MoveModal({data,places,onClose,onMove}:{data:{place:string;sub:string;food:Food};places:Place[];onClose:()=>void;onMove:(fromPlaceId:string,fromSubId:string,foodId:string,toPlaceId:string,toSubId:string)=>void}){
   return <Modal title="Mover alimento" onClose={onClose}>
-    <div className="move-current"><span>Movendo</span><strong>{data.food.name}</strong><small>{formatQuantity(data.food.quantity,data.food.unit)} · {places.find(p=>p.id===data.place)?.name} · {places.find(p=>p.id===data.place)?.subdivisions.find(s=>s.id===data.sub)?.name}</small></div>
-    <p className="modal-help move-help">Escolha o novo destino.</p>
+    <div className="move-current"><span>Movendo</span><strong>{data.food.name}</strong><small>{formatQuantity(data.food.quantity,data.food.unit)} · {places.find(p=>p.id===data.place)?.name}</small></div>
+    <p className="modal-help move-help">Escolha o local de destino.</p>
     <div className="move-list">
-      {places.map(p=><div className="move-place" key={p.id}>
-        <div className="move-place-head"><strong>{p.name}</strong><small>{p.subdivisions.length} {p.subdivisions.length===1?'subdivisão':'subdivisões'}</small></div>
-        <div className="move-sub-list">
-          {p.subdivisions.map(s=>{
-            const same=s.id===data.sub;
-            return <button key={s.id} className={same?'current':''} disabled={same} onClick={()=>onMove(data.place,data.sub,data.food.id,p.id,s.id)}>
-              <span>{s.name}</span>{same?<small>Atual</small>:<ChevronRight size={16}/>}
+      {places.map(p=>{
+        const destination=p.subdivisions[0];
+        const same=p.id===data.place;
+        return <div className="move-place" key={p.id}>
+          <div className="move-place-head"><strong>{p.name}</strong></div>
+          <div className="move-sub-list">
+            <button className={same?'current':''} disabled={same||!destination} onClick={()=>destination&&onMove(data.place,data.sub,data.food.id,p.id,destination.id)}>
+              <span>{p.name}</span>{same?<small>Atual</small>:<ChevronRight size={16}/>}
             </button>
-          })}
-        </div>
-      </div>)}
+          </div>
+        </div>;
+      })}
     </div>
   </Modal>
 }
