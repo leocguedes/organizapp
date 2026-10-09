@@ -4,7 +4,7 @@ import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
 import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
 import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
-import{Apple,BookOpen,Box,CalendarClock,ChevronRight,ClipboardList,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{Apple,ArrowDownUp,BookOpen,Box,CalendarClock,ChevronRight,ClipboardList,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
@@ -376,6 +376,8 @@ function App(){
   const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'|'report'>('inventory');
   const[reportSearch,setReportSearch]=useState('');
   const[reportLocation,setReportLocation]=useState('all');
+  const[foodSort,setFoodSort]=useState<'name'|'expiry'|'quantity-asc'|'quantity-desc'>('name');
+  const[reportSort,setReportSort]=useState<'name'|'expiry'|'location'|'quantity-asc'|'quantity-desc'>('name');
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
   const[recurringRules,setRecurringRules]=useState<RecurringShoppingRule[]>([]);
   const[recurringRuleBusy,setRecurringRuleBusy]=useState(false);
@@ -1281,13 +1283,38 @@ function App(){
   const current=places.find(p=>p.id===selected);
   const sub=current?.subdivisions.find(s=>s.id===selectedSub);
   const total=places.reduce((n,p)=>n+p.subdivisions.reduce((m,s)=>m+s.foods.length,0),0);
+  const sortedLocalFoods=useMemo(()=>{
+    const items=[...(sub?.foods||[])];
+    return items.sort((a,b)=>{
+      if(foodSort==='expiry'){
+        if(!a.expires_on&&!b.expires_on)return a.name.localeCompare(b.name,'pt-BR');
+        if(!a.expires_on)return 1;
+        if(!b.expires_on)return -1;
+        return a.expires_on.localeCompare(b.expires_on)||a.name.localeCompare(b.name,'pt-BR');
+      }
+      if(foodSort==='quantity-asc')return a.quantity-b.quantity||a.name.localeCompare(b.name,'pt-BR');
+      if(foodSort==='quantity-desc')return b.quantity-a.quantity||a.name.localeCompare(b.name,'pt-BR');
+      return a.name.localeCompare(b.name,'pt-BR');
+    });
+  },[sub,foodSort]);
   const reportFoods=useMemo(()=>{
     const query=searchKey(reportSearch.trim());
-    return places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods.map(food=>({
+    const items=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods.map(food=>({
       ...food,placeName:place.name,placeId:place.id,subId:subdivision.id
-    })))).filter(food=>(reportLocation==='all'||food.placeId===reportLocation)&&(!query||searchKey(food.name).includes(query)))
-      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
-  },[places,reportSearch,reportLocation]);
+    })))).filter(food=>(reportLocation==='all'||food.placeId===reportLocation)&&(!query||searchKey(food.name).includes(query)));
+    return items.sort((a,b)=>{
+      if(reportSort==='expiry'){
+        if(!a.expires_on&&!b.expires_on)return a.name.localeCompare(b.name,'pt-BR');
+        if(!a.expires_on)return 1;
+        if(!b.expires_on)return -1;
+        return a.expires_on.localeCompare(b.expires_on)||a.name.localeCompare(b.name,'pt-BR');
+      }
+      if(reportSort==='location')return a.placeName.localeCompare(b.placeName,'pt-BR')||a.name.localeCompare(b.name,'pt-BR');
+      if(reportSort==='quantity-asc')return a.quantity-b.quantity||a.name.localeCompare(b.name,'pt-BR');
+      if(reportSort==='quantity-desc')return b.quantity-a.quantity||a.name.localeCompare(b.name,'pt-BR');
+      return a.name.localeCompare(b.name,'pt-BR');
+    });
+  },[places,reportSearch,reportLocation,reportSort]);
   const results=useMemo(()=>{
     const q=searchKey(search.trim());
     if(!q)return[];
@@ -1585,9 +1612,18 @@ function App(){
 
             {selectedSub&&sub?(
               <>
+                <div className="inventory-sort-bar">
+                  <span><ArrowDownUp size={15}/> Ordenar alimentos</span>
+                  <select aria-label="Ordenar alimentos deste local" value={foodSort} onChange={e=>setFoodSort(e.target.value as typeof foodSort)}>
+                    <option value="name">Alfabética (A–Z)</option>
+                    <option value="expiry">Validade (mais próxima)</option>
+                    <option value="quantity-asc">Quantidade (menor primeiro)</option>
+                    <option value="quantity-desc">Quantidade (maior primeiro)</option>
+                  </select>
+                </div>
                 {sub.foods.length?(
                   <div className="food-list">
-                    {sub.foods.map(f=>(
+                    {sortedLocalFoods.map(f=>(
                       <div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
                         
                         <div className="food-name">
@@ -1662,6 +1698,7 @@ function App(){
             <div className="report-filters">
               <label className="report-search"><Search size={18}/><input value={reportSearch} onChange={e=>setReportSearch(e.target.value)} placeholder="Buscar alimento..." aria-label="Buscar alimento no relatório"/></label>
               <label className="report-location-filter"><span>Local de armazenamento</span><select value={reportLocation} onChange={e=>setReportLocation(e.target.value)}><option value="all">Todos os locais</option>{places.map(place=><option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
+              <label className="report-sort-filter"><span>Ordenar por</span><select value={reportSort} onChange={e=>setReportSort(e.target.value as typeof reportSort)} aria-label="Ordenar relatório"><option value="name">Alfabética (A–Z)</option><option value="expiry">Validade (mais próxima)</option><option value="location">Local (A–Z)</option><option value="quantity-asc">Quantidade (menor primeiro)</option><option value="quantity-desc">Quantidade (maior primeiro)</option></select></label>
             </div>
             {reportFoods.length?(
               <div className="report-table-wrap">

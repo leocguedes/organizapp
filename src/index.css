@@ -731,3 +731,17 @@ button{touch-action:manipulation}
  .report-table td:first-child strong{font-size:14px}
  .report-place-link{max-width:100%;overflow-wrap:anywhere}
 }
+
+
+/* Inventory sorting controls */
+.inventory-sort-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:0 2px}
+.inventory-sort-bar>span{display:flex;align-items:center;gap:7px;color:#7d8a80;font-size:11px;font-weight:600;white-space:nowrap}
+.inventory-sort-bar select,.report-sort-filter select{height:42px;max-width:100%;border:1px solid #dfe6dd;border-radius:10px;background:#fffdf9;padding:0 12px;color:#405146;font:12px 'DM Sans',sans-serif;outline:0;cursor:pointer}
+.inventory-sort-bar select:focus,.report-sort-filter select:focus{border-color:#a7bba8;box-shadow:0 0 0 3px #dfeadd}
+.report-sort-filter{display:flex;flex-direction:column;gap:6px;min-width:190px;font-size:10px;font-weight:700;color:#718078}
+.report-sort-filter select{height:48px}
+@media(max-width:650px){
+ .inventory-sort-bar{align-items:flex-start;flex-direction:column;gap:7px}
+ .inventory-sort-bar select{width:100%}
+ .report-sort-filter{min-width:0;width:100%}
+}
