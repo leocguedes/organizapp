@@ -2,7 +2,7 @@ import{useEffect,useMemo,useRef,useState}from'react';
 import type{ReactNode}from'react';
 import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
-import{Apple,Box,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,Users,X}from'lucide-react';
+import{Apple,Box,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
@@ -10,8 +10,9 @@ type Food={id:string;name:string;quantity:number;unit:Unit};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type Household={id:string;name:string;created_by:string;is_personal:boolean;role:'owner'|'admin'|'member'};
+type ShoppingItem={id:string;household_id:string;name:string;quantity:number;unit:string;category?:string|null;is_purchased:boolean;source:string;linked_food_id?:string|null;notes?:string|null;created_by:string;purchased_by?:string|null;purchased_at?:string|null;created_at?:string};
 type UndoState={label:string;action:()=>void};
-type SyncTable='locations'|'subdivisions'|'foods';
+type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items';
 type SyncAction='upsert'|'update'|'delete';
 type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
@@ -23,6 +24,7 @@ const anonymousLocalKey='organizapp-anonymous';
 const userLocalKey=(userId:string)=>`organizapp-user-${userId}`;
 const householdPlacesKey=(userId:string,householdId:string)=>`organizapp-user-${userId}-household-${householdId}`;
 const activeHouseholdKey=(userId:string)=>`organizapp-active-household-${userId}`;
+const householdShoppingKey=(userId:string,householdId:string)=>`organizapp-shopping-${userId}-${householdId}`;
 const pendingSyncKey='organizapp-pending-sync';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
@@ -101,6 +103,28 @@ function readHouseholdPlaces(userId:string,householdId:string,isPersonal:boolean
 function writeHouseholdPlaces(userId:string,householdId:string,places:Place[]){
   try{localStorage.setItem(householdPlacesKey(userId,householdId),JSON.stringify(places))}
   catch{}
+}
+
+function readShoppingCache(userId:string,householdId:string):ShoppingItem[]{
+  try{
+    const raw=JSON.parse(localStorage.getItem(householdShoppingKey(userId,householdId))||'[]');
+    return Array.isArray(raw)?raw.map((item:any)=>({...item,quantity:Math.max(0,Number(item.quantity)||0),is_purchased:!!item.is_purchased})): [];
+  }catch{return[]}
+}
+
+function writeShoppingCache(userId:string,householdId:string,items:ShoppingItem[]){
+  try{localStorage.setItem(householdShoppingKey(userId,householdId),JSON.stringify(items))}
+  catch{}
+}
+
+function mapShoppingItems(data:any[]):ShoppingItem[]{
+  return(data||[]).map((item:any)=>({
+    ...item,
+    quantity:Math.max(0,Number(item.quantity)||0),
+    unit:String(item.unit||'unidades'),
+    is_purchased:!!item.is_purchased,
+    source:String(item.source||'manual')
+  }));
 }
 
 function readActiveHousehold(userId:string){
@@ -290,6 +314,10 @@ function App(){
   const[householdJoinCode,setHouseholdJoinCode]=useState('');
   const[householdInvite,setHouseholdInvite]=useState<{code:string;expiresAt:string}|null>(null);
   const[householdCopied,setHouseholdCopied]=useState(false);
+  const[workspace,setWorkspace]=useState<'inventory'|'shopping'>('inventory');
+  const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
+  const[shoppingLoading,setShoppingLoading]=useState(false);
+  const[shoppingStockItem,setShoppingStockItem]=useState<ShoppingItem|null>(null);
   const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
@@ -311,6 +339,7 @@ function App(){
   function clearTransientUi(){
     setSelected(null);
     setSelectedSub(null);
+    setWorkspace('inventory');
     setSearch('');
     setFoodModal(null);
     setMoveModal(null);
