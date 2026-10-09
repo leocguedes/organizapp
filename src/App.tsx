@@ -2,6 +2,8 @@ import{useEffect,useMemo,useRef,useState}from'react';
 import type{ReactNode}from'react';
 import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
+import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
+import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
 import{Apple,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
@@ -343,12 +345,13 @@ function App(){
   const[householdJoinCode,setHouseholdJoinCode]=useState('');
   const[householdInvite,setHouseholdInvite]=useState<{code:string;expiresAt:string}|null>(null);
   const[householdCopied,setHouseholdCopied]=useState(false);
-  const[workspace,setWorkspace]=useState<'inventory'|'shopping'>('inventory');
+  const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'>('inventory');
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
   const[shoppingLoading,setShoppingLoading]=useState(false);
   const[shoppingStockItem,setShoppingStockItem]=useState<ShoppingItem|null>(null);
   const[consumptionRules,setConsumptionRules]=useState<ConsumptionRule[]>([]);
   const[consumptionRuleModal,setConsumptionRuleModal]=useState<{foodId:string}|null>(null);
+  const[cookConfirmRecipe,setCookConfirmRecipe]=useState<Recipe|null>(null);
   const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
@@ -768,6 +771,70 @@ function App(){
     }catch{
       setAuthMessage('Esse convite é inválido, expirou ou atingiu o limite de usos.');
     }finally{setHouseholdBusy(false)}
+  }
+
+  async function addRecipeMissing(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'>[]){
+    if(!userId||!householdId){
+      setAuthMessage('Entre na sua conta para adicionar ingredientes à lista de compras.');
+      setAuthModal(true);
+      return;
+    }
+    for(const item of items)await addShoppingItem(item.name,item.quantity,item.unit,'recipe');
+    setSelected(null);
+    setWorkspace('shopping');
+    setAuthMessage(items.length+' '+(items.length===1?'ingrediente adicionado':'ingredientes adicionados')+' à lista de compras.');
+  }
+
+  async function cookRecipe(recipe:Recipe){
+    const pantry:RecipePantryItem[]=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods));
+    const statuses=getRecipeIngredientStatuses(recipe,pantry);
+    if(statuses.some(status=>status.enough!==true)){
+      setCookConfirmRecipe(null);
+      setAuthMessage('Ainda faltam ingredientes ou há unidades que não podem ser comparadas com segurança.');
+      return;
+    }
+
+    const updates=new Map<string,{placeId:string;subId:string;food:Food;quantity:number}>();
+    for(const ingredient of recipe.ingredients){
+      let remaining=ingredient.quantity;
+      const candidates=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods
+        .filter(food=>matchesRecipeIngredient(ingredient,food.name)&&!(food.expires_on&&food.expires_on<localDateString()))
+        .map(food=>({placeId:place.id,subId:subdivision.id,food}))))
+        .sort((a,b)=>(a.food.expires_on||'9999-12-31').localeCompare(b.food.expires_on||'9999-12-31'));
+      for(const candidate of candidates){
+        if(remaining<=1e-7)break;
+        const already=updates.get(candidate.food.id);
+        const currentQty=already?.quantity??candidate.food.quantity;
+        const available=convertRecipeQuantity(currentQty,candidate.food.unit,ingredient.unit);
+        if(available===null||available<=0)continue;
+        const consumed=Math.min(available,remaining);
+        const consumedInStockUnit=convertRecipeQuantity(consumed,ingredient.unit,candidate.food.unit);
+        if(consumedInStockUnit===null)continue;
+        updates.set(candidate.food.id,{
+          ...candidate,
+          quantity:Math.max(0,Number((currentQty-consumedInStockUnit).toFixed(3)))
+        });
+        remaining-=consumed;
+      }
+    }
+
+    const updatedPlaces=places.map(place=>({...place,subdivisions:place.subdivisions.map(subdivision=>({...subdivision,foods:subdivision.foods.map(food=>{
+      const update=updates.get(food.id);
+      return update?{...food,quantity:update.quantity}:food;
+    })}))}));
+    setPlaces(updatedPlaces);
+    setCookConfirmRecipe(null);
+    for(const update of updates.values()){
+      if(userId){
+        const ok=await writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:update.food.id,data:{quantity:update.quantity}});
+        if(!ok)syncError('Receita registrada localmente; o estoque será sincronizado quando a conexão voltar.');
+      }
+      const rule=consumptionRules.find(item=>item.food_id===update.food.id);
+      if(userId&&rule?.low_stock_threshold!==null&&rule?.low_stock_threshold!==undefined&&rule.restock_quantity!==null&&rule.restock_quantity!==undefined&&update.quantity<=rule.low_stock_threshold){
+        await addShoppingItem(update.food.name,rule.restock_quantity,update.food.unit,'low_stock');
+      }
+    }
+    setAuthMessage('Receita marcada como preparada. O estoque foi atualizado.');
   }
 
   async function saveConsumptionRule(foodId:string,amount:number,periodDays:number,threshold:number|null,restockQuantity:number|null){
