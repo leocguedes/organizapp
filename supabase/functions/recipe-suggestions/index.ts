@@ -216,8 +216,9 @@ Deno.serve(async (req: Request) => {
     try {
       const result = await fetchMealDb(`lookup.php?i=${encodeURIComponent(id)}`);
       const meal = Array.isArray(result.meals) ? result.meals[0] as Record<string, unknown> | undefined : undefined;
-      if (meal && Array.isArray(parseMeal(meal).ingredients) && parseMeal(meal).ingredients.length) {
-        recipes.push(parseMeal(meal));
+      if (meal) {
+        const parsed = parseMeal(meal);
+        if (parsed.ingredients.length) recipes.push(parsed);
       }
     } catch {
       // Skip a meal that could not be loaded.
