@@ -1670,7 +1670,7 @@ function App(){
                   <tbody>{reportFoods.map(food=><tr key={food.id}>
                     <td data-label="Alimento"><strong>{food.name}</strong></td>
                     <td data-label="Onde está"><button className="report-place-link" onClick={()=>{setSelected(food.placeId);setSelectedSub(food.subId)}}>{locationEmoji(food.placeName)} {food.placeName}<ChevronRight size={14}/></button></td>
-                    <td data-label="Quantidade"><span className="report-quantity">{formatQuantity(food.quantity)} {food.unit}</span>{food.quantity===0&&<small className="report-out">Sem estoque</small>}</td>
+                    <td data-label="Quantidade"><span className="report-quantity">{formatQuantity(food.quantity,food.unit)}</span>{food.quantity===0&&<small className="report-out">Sem estoque</small>}</td>
                     <td data-label="Validade">{food.expires_on?<span className="report-expiry"><strong>{food.expires_on.split('-').reverse().join('/')}</strong><small className={'expiry-label '+(daysUntilExpiry(food.expires_on)<0?'expired':daysUntilExpiry(food.expires_on)<=3?'urgent':'')}>{expiryCaption(food.expires_on)}</small></span>:<span className="report-no-expiry">Não informada</span>}</td>
                   </tr>)}</tbody>
                 </table>
