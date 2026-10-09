@@ -15,6 +15,7 @@ type SyncAction='upsert'|'update'|'delete';
 type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
 const recentFoodsKey='organizapp-recent-foods';
+const userRecentFoodsKey=(userId:string)=>`organizapp-recent-foods-user-${userId}`;
 const localOwnerKey='organizapp-local-owner';
 const legacyLocalKey='organizapp';
 const anonymousLocalKey='organizapp-anonymous';
@@ -85,6 +86,19 @@ function readAnonymousPlaces(){
 function writeLocalPlaces(userId:string|null,places:Place[]){
   try{localStorage.setItem(userId?userLocalKey(userId):anonymousLocalKey,JSON.stringify(places))}
   catch{}
+}
+
+function readRecentFoods(userId:string|null):RecentFood[]{
+  try{
+    const raw=JSON.parse(localStorage.getItem(userId?userRecentFoodsKey(userId):recentFoodsKey)||'[]');
+    return Array.isArray(raw)?raw.slice(0,8):[];
+  }catch{return[]}
+}
+
+function writeRecentFoods(userId:string|null,foods:RecentFood[]){
+  try{
+    localStorage.setItem(userId?userRecentFoodsKey(userId):recentFoodsKey,JSON.stringify(foods.slice(0,8)));
+  }catch{}
 }
 
 async function uploadLocal(userId:string,places:Place[]){
@@ -190,7 +204,7 @@ function mapCloudPlaces(data:any[]):Place[]{
 
 function App(){
   const[places,setPlaces]=useState<Place[]>(()=>readAnonymousPlaces());
-  const[recentFoods,setRecentFoods]=useState<RecentFood[]>(()=>{try{const raw=JSON.parse(localStorage.getItem(recentFoodsKey)||'[]');return Array.isArray(raw)?raw.slice(0,8):[]}catch{return[]}});
+  const[recentFoods,setRecentFoods]=useState<RecentFood[]>(()=>readRecentFoods(null));
   const[userId,setUserId]=useState<string|null>(null);
   const[user,setUser]=useState<any>(null);
   const[synced,setSynced]=useState(false);
@@ -245,6 +259,7 @@ function App(){
       setCacheReady(false);
       setUser(current);
       setUserId(current.id);
+      setRecentFoods(readRecentFoods(current.id));
       const accountLocal=readLocalPlaces(current.id);
       const pendingOk=await flushPendingSync(current.id);
       if(!active||request!==authRequest.current)return;
@@ -309,8 +324,12 @@ function App(){
         if(event==='SIGNED_IN'&&session?.user){
           clearTransientUi();
           setCacheReady(false);
+          setRecentFoods(readRecentFoods(session.user.id));
         }
-        if(event==='SIGNED_OUT')clearTransientUi();
+        if(event==='SIGNED_OUT'){
+          clearTransientUi();
+          setRecentFoods(readRecentFoods(null));
+        }
       }
       if(event==='PASSWORD_RECOVERY'){
         setPasswordRecovery(true);
@@ -322,6 +341,7 @@ function App(){
         setSynced(false);
         setCacheReady(true);
         setPlaces(readAnonymousPlaces());
+        setRecentFoods(readRecentFoods(null));
         return;
       }
       setUser(session.user);
@@ -383,7 +403,7 @@ function App(){
     setRecentFoods(prev=>{
       const key=searchKey(name.trim());
       const next=[{name:name.trim(),unit},...prev.filter(f=>searchKey(f.name.trim())!==key)].slice(0,8);
-      localStorage.setItem(recentFoodsKey,JSON.stringify(next));
+      writeRecentFoods(userId,next);
       return next;
     });
   }
