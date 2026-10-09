@@ -269,7 +269,7 @@ function syncEntityKey(op:Pick<PendingOperation,'table'|'rowId'|'data'>){
 
 function clearPendingForEntity(userId:string,operation:Omit<PendingOperation,'id'>){
   const entity=syncEntityKey(operation);
-  if(!entity.split(':').at(-1))return;
+  if(entity.endsWith(':'))return;
   const queue=readPendingSync();
   const next=queue.filter(op=>!(op.userId===userId&&syncEntityKey(op)===entity));
   if(next.length!==queue.length)writePendingSync(next);
