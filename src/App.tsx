@@ -451,7 +451,12 @@ function App(){
           const request=++authRequest.current;
           const{data:cloudData,error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
           if(request===authRequest.current&&cloudError){
+            const legacyAccountCache=previousOwner===data.user.id?readStoredPlaces(legacyLocalKey):null;
+            const fallback=legacyAccountCache?.length?legacyAccountCache:!previousOwner?local:readLocalPlaces(data.user.id);
+            setPlaces(fallback);
+            writeLocalPlaces(data.user.id,fallback);
             setSynced(false);
+            setCacheReady(true);
             setAuthMessage('Conta criada, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
           }else if(request===authRequest.current){
             const cloudPlaces=mapCloudPlaces(cloudData||[]);
