@@ -347,6 +347,7 @@ function App(){
   const[householdCopied,setHouseholdCopied]=useState(false);
   const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'>('inventory');
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
+  const shoppingItemsRef=useRef<ShoppingItem[]>([]);
   const[shoppingLoading,setShoppingLoading]=useState(false);
   const[shoppingStockItem,setShoppingStockItem]=useState<ShoppingItem|null>(null);
   const[consumptionRules,setConsumptionRules]=useState<ConsumptionRule[]>([]);
@@ -506,6 +507,7 @@ function App(){
 
   useEffect(()=>{
     if(!userId||!householdId){
+      shoppingItemsRef.current=[];
       setShoppingItems([]);
       setShoppingLoading(false);
       return;
@@ -513,7 +515,9 @@ function App(){
     let active=true;
     const accountId=userId;
     const activeHouse=householdId;
-    setShoppingItems(readShoppingCache(accountId,activeHouse));
+    const cachedItems=readShoppingCache(accountId,activeHouse);
+    shoppingItemsRef.current=cachedItems;
+    setShoppingItems(cachedItems);
     setShoppingLoading(true);
     void (async()=>{
       try{
@@ -524,10 +528,13 @@ function App(){
         if(!active)return;
         if(error){
           setAuthMessage('A lista de compras está disponível em cache, mas não foi possível sincronizá-la agora.');
-          setShoppingItems(readShoppingCache(accountId,activeHouse));
+          const fallbackItems=readShoppingCache(accountId,activeHouse);
+          shoppingItemsRef.current=fallbackItems;
+          setShoppingItems(fallbackItems);
           return;
         }
         const items=mapShoppingItems(data||[]);
+        shoppingItemsRef.current=items;
         setShoppingItems(items);
         writeShoppingCache(accountId,activeHouse,items);
       }finally{
@@ -927,6 +934,7 @@ function App(){
   }
 
   function persistShopping(next:ShoppingItem[],targetHousehold=householdId,targetUser=userId){
+    shoppingItemsRef.current=next;
     setShoppingItems(next);
     if(targetUser&&targetHousehold)writeShoppingCache(targetUser,targetHousehold,next);
   }
@@ -939,10 +947,11 @@ function App(){
       setAuthModal(true);
       return;
     }
-    const duplicate=shoppingItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
+    const currentItems=shoppingItemsRef.current;
+    const duplicate=currentItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
     if(duplicate){
       const nextQuantity=Number((duplicate.quantity+quantity).toFixed(3));
-      const next=shoppingItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source}:item);
+      const next=currentItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source}:item);
       persistShopping(next);
       const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity,...(source!=='manual'?{source}:{})}});
       if(!ok)syncError('Quantidade atualizada na lista deste dispositivo; será sincronizada quando a conexão voltar.');
@@ -952,7 +961,7 @@ function App(){
       id:uid(),household_id:householdId,name:clean,quantity,unit,
       is_purchased:false,source,created_by:userId,created_at:new Date().toISOString()
     };
-    persistShopping([item,...shoppingItems]);
+    persistShopping([item,...currentItems]);
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'upsert',rowId:item.id,data:item as unknown as Record<string,unknown>});
     if(!ok)syncError('Item adicionado à lista local; será sincronizado quando a conexão voltar.');
   }
@@ -966,16 +975,17 @@ function App(){
       purchased_by:isPurchased?userId:null,
       purchased_at:isPurchased?new Date().toISOString():null
     };
-    persistShopping(shoppingItems.map(row=>row.id===item.id?updated:row));
+    persistShopping(shoppingItemsRef.current.map(row=>row.id===item.id?updated:row));
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:item.id,data:{
       is_purchased:updated.is_purchased,purchased_by:updated.purchased_by,purchased_at:updated.purchased_at
     }});
     if(!ok)syncError('Estado atualizado localmente; será sincronizado quando a conexão voltar.');
+    if(isPurchased)setShoppingStockItem(updated);
   }
 
   async function deleteShoppingItem(item:ShoppingItem){
     if(!userId||!householdId||item.household_id!==householdId)return;
-    persistShopping(shoppingItems.filter(row=>row.id!==item.id));
+    persistShopping(shoppingItemsRef.current.filter(row=>row.id!==item.id));
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'delete',rowId:item.id});
     if(!ok)syncError('Item removido localmente; a exclusão será sincronizada quando a conexão voltar.');
   }
@@ -995,7 +1005,7 @@ function App(){
       targetFoodId=await saveFood(placeId,subId,{name:item.name,quantity:item.quantity,unit,expires_on:expiresOn});
     }
     if(!targetFoodId)return;
-    const updated=shoppingItems.map(row=>row.id===item.id?{...row,linked_food_id:targetFoodId}:row);
+    const updated=shoppingItemsRef.current.map(row=>row.id===item.id?{...row,linked_food_id:targetFoodId}:row);
     persistShopping(updated);
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:item.id,data:{linked_food_id:targetFoodId}});
     if(!ok)syncError('O alimento foi adicionado ao estoque. A lista será sincronizada quando a conexão voltar.');
