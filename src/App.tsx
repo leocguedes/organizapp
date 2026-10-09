@@ -333,6 +333,8 @@ function App(){
         setCacheReady(true);
         setUser(null);
         setUserId(null);
+        setHouseholds([]);
+        setHouseholdId(null);
         setSynced(false);
         setPlaces(anonymousLocal);
         return;
@@ -341,67 +343,69 @@ function App(){
       setUser(current);
       setUserId(current.id);
       setRecentFoods(readRecentFoods(current.id));
-      const accountLocal=readLocalPlaces(current.id);
+      let context;
+      try{
+        context=await fetchHouseholdContext(current.id);
+      }catch{
+        if(!active||request!==authRequest.current)return;
+        setAuthMessage('Não foi possível carregar as casas compartilhadas. Seus dados locais continuam preservados.');
+        setPlaces(readLocalPlaces(current.id));
+        setSynced(false);
+        setCacheReady(true);
+        return;
+      }
+      if(!active||request!==authRequest.current)return;
+      setHouseholds(context.households);
+      setHouseholdId(context.householdId);
+      writeActiveHousehold(current.id,context.householdId);
+      const accountLocal=readHouseholdPlaces(current.id,context.householdId,context.household.is_personal);
+      setPlaces(accountLocal);
       const pendingOk=await flushPendingSync(current.id);
       if(!active||request!==authRequest.current)return;
       if(!pendingOk){
         setSynced(false);
         setAuthMessage('Há alterações aguardando sincronização. Seus dados locais continuam disponíveis.');
-        setPlaces(accountLocal);
         setCacheReady(true);
         return;
       }
-      const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
+      const{data,error}=await supabase.from('locations')
+        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+        .eq('household_id',context.householdId)
+        .order('created_at');
       if(!active||request!==authRequest.current)return;
       if(error){
         setAuthMessage('Não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
-        setPlaces(accountLocal);
         setCacheReady(true);
         return;
       }
       const cloudPlaces=mapCloudPlaces(data||[]);
-      const accountCache=readStoredPlaces(userLocalKey(current.id));
-      const legacyAccountCache=getLocalOwner()===current.id?readStoredPlaces(legacyLocalKey):null;
-      const recoveryCache=accountCache?.length?accountCache:legacyAccountCache;
-      if(cloudPlaces.length===0&&recoveryCache?.length){
-        setPlaces(recoveryCache);
-        writeLocalPlaces(current.id,recoveryCache);
+      if(cloudPlaces.length){
+        setPlaces(cloudPlaces);
+        writeHouseholdPlaces(current.id,context.householdId,cloudPlaces);
+        clearLegacyCachesIfMatching(current.id,cloudPlaces);
+        setSynced(true);
+        setCacheReady(true);
+        return;
+      }
+      if(accountLocal.length){
+        setPlaces(accountLocal);
+        writeHouseholdPlaces(current.id,context.householdId,accountLocal);
         try{
-          await uploadLocal(current.id,recoveryCache);
+          await uploadLocal(current.id,accountLocal,context.householdId);
           if(!active||request!==authRequest.current)return;
-          clearLegacyCachesIfMatching(current.id,recoveryCache);
+          clearLegacyCachesIfMatching(current.id,accountLocal);
           setSynced(true);
         }catch{
           if(!active||request!==authRequest.current)return;
           setSynced(false);
           setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
         }
-        setCacheReady(true);
-        return;
-      }
-      if(cloudPlaces.length===0&&anonymousLocal.length&&!getLocalOwner()){
-        try{
-          await uploadLocal(current.id,anonymousLocal);
-          if(active&&request===authRequest.current){
-            setPlaces(anonymousLocal);
-            writeLocalPlaces(current.id,anonymousLocal);
-            clearLegacyCachesIfMatching(current.id,anonymousLocal);
-          }
-        }catch{
-          if(active&&request===authRequest.current){
-            setPlaces(anonymousLocal);
-            setAuthMessage('Seus dados locais continuam disponíveis, mas não foi possível concluir a sincronização.');
-          }
-        }
-      }else if(active&&request===authRequest.current){
-        setPlaces(cloudPlaces);
-        writeLocalPlaces(current.id,cloudPlaces);
-        clearLegacyCachesIfMatching(current.id,cloudPlaces);
-      }
-      if(active&&request===authRequest.current){
+      }else{
+        setPlaces([]);
+        writeHouseholdPlaces(current.id,context.householdId,[]);
         setSynced(true);
-        setCacheReady(true);
       }
+      if(active&&request===authRequest.current)setCacheReady(true);
     };
     load();
     const{data:listener}=supabase.auth.onAuthStateChange((event,session)=>{
@@ -425,6 +429,8 @@ function App(){
       if(!session?.user){
         setUser(null);
         setUserId(null);
+        setHouseholds([]);
+        setHouseholdId(null);
         setSynced(false);
         setCacheReady(true);
         setPlaces(readAnonymousPlaces());
@@ -439,8 +445,9 @@ function App(){
 
   useEffect(()=>{
     if(!cacheReady)return;
-    writeLocalPlaces(userId,places);
-  },[cacheReady,userId,places]);
+    if(userId&&householdId)writeHouseholdPlaces(userId,householdId,places);
+    else writeLocalPlaces(userId,places);
+  },[cacheReady,userId,householdId,places]);
 
   useEffect(()=>{
     const updateOnline=()=>setOnline(navigator.onLine);
