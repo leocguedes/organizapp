@@ -1117,6 +1117,11 @@ function App(){
       <main>
         {authMessage&&<div className="auth-note" role="status" aria-live="polite">{authMessage}</div>}
 
+        {!selected&&<nav className="workspace-nav" aria-label="Áreas do OrganizaApp">
+          <button className={workspace==='inventory'?'active':''} onClick={()=>setWorkspace('inventory')}><Box size={17}/> Estoque</button>
+          <button className={workspace==='shopping'?'active':''} onClick={()=>setWorkspace('shopping')}><ShoppingCart size={17}/> Lista de compras{shoppingItems.filter(item=>!item.is_purchased).length>0&&<span>{shoppingItems.filter(item=>!item.is_purchased).length}</span>}</button>
+        </nav>}
+
         {selected?(
           <section>
             <button className="back" onClick={()=>{setSelected(null);setSelectedSub(null)}}>← Todos os locais</button>
@@ -1223,6 +1228,17 @@ function App(){
               </>
             ):null}
           </section>
+        ):workspace==='shopping'?(
+          <ShoppingPage
+            items={shoppingItems}
+            loading={shoppingLoading}
+            signedIn={!!userId&&!!householdId}
+            onAdd={addShoppingItem}
+            onToggle={toggleShoppingItem}
+            onDelete={deleteShoppingItem}
+            onStock={item=>setShoppingStockItem(item)}
+            onSignIn={()=>setAuthModal(true)}
+          />
         ):(
           <section>
             <div className="hero">
@@ -1349,6 +1365,12 @@ function App(){
       {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{const ok=await removePlace(id);if(ok){setPlaceModal(false);setPlaceToEdit(null)}return ok}}/>}
       {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
       {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+      {shoppingStockItem&&<ShoppingStockModal
+        item={shoppingStockItem}
+        places={places}
+        onClose={()=>setShoppingStockItem(null)}
+        onConfirm={addPurchasedShoppingToStock}
+      />}
       {householdModal&&<HouseholdModal
         busy={householdBusy}
         households={households}
@@ -1393,6 +1415,96 @@ function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>voi
     <button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>
     {mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}
     <button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button>
+  </Modal>
+}
+
+function ShoppingPage({items,loading,signedIn,onAdd,onToggle,onDelete,onStock,onSignIn}:{items:ShoppingItem[];loading:boolean;signedIn:boolean;onAdd:(name:string,quantity:number,unit:Unit)=>void;onToggle:(item:ShoppingItem)=>void;onDelete:(item:ShoppingItem)=>void;onStock:(item:ShoppingItem)=>void;onSignIn:()=>void}){
+  const[name,setName]=useState('');
+  const[quantity,setQuantity]=useState(1);
+  const[unit,setUnit]=useState<Unit>('unidades');
+  const pending=items.filter(item=>!item.is_purchased);
+  const purchased=items.filter(item=>item.is_purchased);
+  const submit=(event:{preventDefault:()=>void})=>{
+    event.preventDefault();
+    if(!signedIn){onSignIn();return}
+    if(!name.trim()||!Number.isFinite(quantity)||quantity<=0)return;
+    onAdd(name,quantity,unit);
+    setName('');
+    setQuantity(1);
+    setUnit('unidades');
+  };
+  return <section className="shopping-page">
+    <div className="hero shopping-hero">
+      <div className="hero-copy">
+        <p className="eyebrow">SUA CASA</p>
+        <h2>Lista de compras</h2>
+        <p>Uma lista compartilhada com sua casa, ligada ao estoque para facilitar a reposição.</p>
+      </div>
+      <div className="shopping-summary"><strong>{pending.length}</strong><span>{pending.length===1?'item pendente':'itens pendentes'}</span></div>
+    </div>
+    {!signedIn?(
+      <div className="no-places shopping-signin">
+        <div className="no-places-icon"><Users size={22}/></div>
+        <h3>Compartilhe suas compras</h3>
+        <p>Entre na sua conta para manter a lista sincronizada entre os membros da casa.</p>
+        <button className="primary" onClick={onSignIn}>Entrar ou criar conta</button>
+      </div>
+    ):<>
+      <form className="shopping-add-form" onSubmit={submit}>
+        <div className="shopping-form-heading"><strong>Adicionar à lista</strong><span>Itens repetidos com a mesma unidade são somados.</span></div>
+        <label>Produto<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Leite integral" maxLength={120}/></label>
+        <div className="shopping-form-row">
+          <label>Quantidade<input type="number" min="0.01" step={unit==='kg'||unit==='L'?0.1:1} value={quantity} onChange={e=>setQuantity(Number(e.target.value))}/></label>
+          <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <button className="primary shopping-add-button" type="submit" disabled={!name.trim()||!Number.isFinite(quantity)||quantity<=0||loading}><Plus size={17}/> Adicionar</button>
+        </div>
+      </form>
+      <div className="shopping-section-heading">
+        <div><h3>Para comprar</h3><p>{pending.length?pending.length+(pending.length===1?' item aguardando':' itens aguardando'):'Tudo comprado por enquanto'}</p></div>
+        {loading&&<span className="shopping-loading">Sincronizando…</span>}
+      </div>
+      {pending.length? <div className="shopping-items">
+        {pending.map(item=><ShoppingRow key={item.id} item={item} onToggle={onToggle} onDelete={onDelete} onStock={onStock}/>)}
+      </div>:<div className="shopping-empty"><ShoppingCart size={25}/><strong>Sua lista está vazia</strong><span>Adicione um item ou aproveite as sugestões de reposição quando estiverem disponíveis.</span></div>}
+      {purchased.length>0&&<details className="shopping-purchased">
+        <summary>Comprados ({purchased.length})</summary>
+        <div className="shopping-items">{purchased.map(item=><ShoppingRow key={item.id} item={item} onToggle={onToggle} onDelete={onDelete} onStock={onStock}/>)}</div>
+      </details>}
+    </>}
+  </section>
+}
+
+function ShoppingRow({item,onToggle,onDelete,onStock}:{item:ShoppingItem;onToggle:(item:ShoppingItem)=>void;onDelete:(item:ShoppingItem)=>void;onStock:(item:ShoppingItem)=>void}){
+  const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
+  return <div className={'shopping-row '+(item.is_purchased?'purchased':'')}>
+    <label className="shopping-check"><input type="checkbox" checked={item.is_purchased} onChange={()=>onToggle(item)} aria-label={(item.is_purchased?'Desmarcar ':'Marcar como comprado ')+item.name}/><span className="shopping-checkmark"/></label>
+    <div className="shopping-row-name"><strong>{item.name}</strong><small>{formatQuantity(item.quantity,unit)}{item.category?' · '+item.category:''}{item.source!=='manual'?' · sugestão automática':''}</small></div>
+    <div className="shopping-row-actions">
+      {item.is_purchased&&!item.linked_food_id&&<button type="button" onClick={()=>onStock(item)} title="Adicionar ao estoque">Adicionar ao estoque</button>}
+      {item.linked_food_id&&<span className="shopping-stock-linked">No estoque</span>}
+      <button type="button" className="shopping-delete" onClick={()=>onDelete(item)} aria-label={'Excluir '+item.name} title="Excluir item"><Trash2 size={16}/></button>
+    </div>
+  </div>
+}
+
+function ShoppingStockModal({item,places,onClose,onConfirm}:{item:ShoppingItem;places:Place[];onConfirm:(item:ShoppingItem,placeId:string,subId:string)=>void;onClose:()=>void}){
+  const[placeId,setPlaceId]=useState(places[0]?.id||'');
+  const[subId,setSubId]=useState(places[0]?.subdivisions[0]?.id||'');
+  const place=places.find(p=>p.id===placeId);
+  const availableSub=place?.subdivisions.find(s=>s.id===subId);
+  const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
+  return <Modal title="Adicionar ao estoque" onClose={onClose}>
+    <div className="move-current"><span>Compra concluída</span><strong>{item.name}</strong><small>{formatQuantity(item.quantity,unit)}</small></div>
+    {places.length?<>
+      <p className="modal-help">Escolha onde guardar o que você comprou.</p>
+      <label>Local<select value={placeId} onChange={e=>{const next=e.target.value;setPlaceId(next);setSubId(places.find(p=>p.id===next)?.subdivisions[0]?.id||'')}}>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      <label>Divisão<select value={subId} disabled={!place} onChange={e=>setSubId(e.target.value)}>{place?.subdivisions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      {availableSub?.foods.some(f=>searchKey(f.name)===searchKey(item.name)&&f.unit===unit)&&<p className="modal-help">Esse alimento já existe nesta divisão. A quantidade será somada ao estoque atual.</p>}
+      <button className="primary full" disabled={!place||!availableSub} onClick={()=>onConfirm(item,placeId,subId)}>Adicionar {formatQuantity(item.quantity,unit)}</button>
+    </>:<>
+      <p className="modal-help">Crie um local e uma divisão antes de adicionar esta compra ao estoque.</p>
+      <button className="primary full" onClick={onClose}>Fechar</button>
+    </>}
   </Modal>
 }
 
