@@ -784,7 +784,7 @@ function App(){
       food_id:foodId,
       amount,
       period_days:periodDays,
-      next_suggestion_on:existing?.next_suggestion_on||today,
+      next_suggestion_on:existing?.next_suggestion_on||addIsoDays(today,periodDays),
       low_stock_threshold:threshold,
       restock_quantity:restockQuantity,
       is_active:true,
@@ -913,19 +913,19 @@ function App(){
     if(!ok)syncError('Item removido localmente; a exclusão será sincronizada quando a conexão voltar.');
   }
 
-  async function addPurchasedShoppingToStock(item:ShoppingItem,placeId:string,subId:string){
+  async function addPurchasedShoppingToStock(item:ShoppingItem,placeId:string,subId:string,expiresOn:string|null){
     if(!userId||!householdId||!item.is_purchased)return;
     const targetPlace=places.find(place=>place.id===placeId);
     const targetSub=targetPlace?.subdivisions.find(subdivision=>subdivision.id===subId);
     if(!targetPlace||!targetSub)return;
     const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
-    const existing=targetSub.foods.find(food=>searchKey(food.name)===searchKey(item.name)&&food.unit===unit);
+    const existing=targetSub.foods.find(food=>searchKey(food.name)===searchKey(item.name)&&food.unit===unit&&(food.expires_on||'')===(expiresOn||''));
     let targetFoodId:string|null=null;
     if(existing){
       targetFoodId=existing.id;
       await addToExistingFood(placeId,subId,existing.id,item.quantity,unit);
     }else{
-      targetFoodId=await saveFood(placeId,subId,{name:item.name,quantity:item.quantity,unit});
+      targetFoodId=await saveFood(placeId,subId,{name:item.name,quantity:item.quantity,unit,expires_on:expiresOn});
     }
     if(!targetFoodId)return;
     const updated=shoppingItems.map(row=>row.id===item.id?{...row,linked_food_id:targetFoodId}:row);
