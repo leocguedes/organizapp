@@ -28,6 +28,7 @@ export type RecipePantryItem = {
 export type RecipeIngredientStatus = {
   ingredient: RecipeIngredient;
   matches: RecipePantryItem[];
+  expiredMatches: RecipePantryItem[];
   availableQuantity: number;
   comparable: boolean;
   enough: boolean | null;
@@ -50,8 +51,12 @@ export function convertRecipeQuantity(quantity:number,from:Unit,to:Unit):number|
 }
 
 export function getRecipeIngredientStatuses(recipe:Recipe,pantry:RecipePantryItem[]):RecipeIngredientStatus[]{
+  const now=new Date();
+  const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
   return recipe.ingredients.map(ingredient=>{
-    const matches=pantry.filter(item=>matchesRecipeIngredient(ingredient,item.name));
+    const allMatches=pantry.filter(item=>matchesRecipeIngredient(ingredient,item.name));
+    const expiredMatches=allMatches.filter(item=>!!item.expires_on&&item.expires_on<today);
+    const matches=allMatches.filter(item=>!item.expires_on||item.expires_on>=today);
     let availableQuantity=0;
     let comparable=false;
     for(const item of matches){
@@ -62,7 +67,7 @@ export function getRecipeIngredientStatuses(recipe:Recipe,pantry:RecipePantryIte
     }
     const enough=comparable?availableQuantity+1e-8>=ingredient.quantity:matches.length?null:false;
     const missingQuantity=comparable?Math.max(0,ingredient.quantity-availableQuantity):matches.length?0:ingredient.quantity;
-    return{ingredient,matches,availableQuantity,comparable,enough,missingQuantity};
+    return{ingredient,matches,expiredMatches,availableQuantity,comparable,enough,missingQuantity};
   });
 }
 
