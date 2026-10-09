@@ -17,7 +17,7 @@ type ShoppingItem={id:string;household_id:string;name:string;quantity:number;uni
 type RecurringShoppingRule={id:string;household_id:string;name:string;quantity:number;unit:string;frequency_days:number;next_due_on:string;is_active:boolean;created_by:string;created_at?:string;};
 type UndoState={label:string;action:()=>void};
 type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items'|'recurring_shopping_items'|'food_consumption_rules'|'food_consumption_events';
-type SyncAction='upsert'|'update'|'delete';
+type SyncAction='insert'|'upsert'|'update'|'delete';
 type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
 const recentFoodsKey='organizapp-recent-foods';
@@ -271,6 +271,12 @@ function queuePendingSync(operation:Omit<PendingOperation,'id'>){
 }
 
 async function applyPendingSync(op:PendingOperation){
+  if(op.action==='insert'){
+    const{error}=await supabase.from(op.table).insert(op.data||{});
+    if(error?.code==='23505')return;
+    if(error)throw error;
+    return;
+  }
   if(op.action==='upsert'){
     const{error}=await supabase.from(op.table).upsert(op.data||{});
     if(error)throw error;
@@ -1075,7 +1081,7 @@ function App(){
       event_type:confirm?'confirmed':'skipped',scheduled_for:rule.next_suggestion_on,
       amount,previous_quantity:previousQuantity,new_quantity:nextQuantity,created_by:userId
     };
-    const eventOk=await writeOrQueue(userId,{userId,table:'food_consumption_events',action:'upsert',rowId:eventId,data:event});
+    const eventOk=await writeOrQueue(userId,{userId,table:'food_consumption_events',action:'insert',rowId:eventId,data:event});
     const nextDate=addIsoDays(localDateString(),confirm?rule.period_days:1);
     const updatedRule={...rule,next_suggestion_on:nextDate,last_confirmed_at:confirm?new Date().toISOString():rule.last_confirmed_at};
     setConsumptionRules(current=>current.map(item=>item.id===rule.id?updatedRule:item));
