@@ -1021,6 +1021,22 @@ function App(){
     });
   },[search,places]);
 
+  const todayISO=localDateString();
+  const expiringFoods=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods
+    .filter(food=>!!food.expires_on&&daysUntilExpiry(food.expires_on!)<=7)
+    .map(food=>({food,place,subdivision,days:daysUntilExpiry(food.expires_on!)}))))
+    .sort((a,b)=>a.days-b.days);
+  const dueConsumptionSuggestions=consumptionRules.filter(rule=>rule.is_active&&rule.next_suggestion_on<=todayISO)
+    .flatMap(rule=>{
+      for(const place of places){
+        for(const subdivision of place.subdivisions){
+          const food=subdivision.foods.find(item=>item.id===rule.food_id);
+          if(food&&food.quantity>0)return[{rule,food,place,subdivision}];
+        }
+      }
+      return[];
+    });
+
   async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string):Promise<string|null>{
     const cleanName=data.name.trim();
     if(!cleanName||!places.some(p=>p.id===placeId&&p.subdivisions.some(s=>s.id===subId)))return null;
@@ -1354,6 +1370,7 @@ function App(){
                             <div className="action-menu" onClick={e=>e.stopPropagation()}>
                               <button onClick={()=>{setFoodModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><Edit3 size={16}/> Editar</button>
                               <button onClick={()=>{setMoveModal({place:selected,sub:selectedSub,food:f});setFoodMenu(null)}}><MoveRight size={16}/> Mover para...</button>
+                              <button onClick={()=>{setConsumptionRuleModal({foodId:f.id});setFoodMenu(null)}}><CalendarClock size={16}/> {consumptionRules.some(rule=>rule.food_id===f.id)?'Editar consumo previsto':'Programar consumo'}</button>
                               <button className="danger" onClick={()=>removeFood(selected,selectedSub,f.id)}><Trash2 size={16}/> Excluir</button>
                             </div>
                           )}
@@ -1409,6 +1426,35 @@ function App(){
                 </button>
               )}
             </div>
+
+            {!search&&dueConsumptionSuggestions.length>0&&<section className="consumption-panel">
+              <div className="smart-panel-heading"><div><p className="eyebrow">CONSUMO PLANEJADO</p><h3>Uma revisão rápida</h3><p>Confirme o consumo real para manter o estoque correto.</p></div><span>{dueConsumptionSuggestions.length}</span></div>
+              <div className="smart-suggestion-list">
+                {dueConsumptionSuggestions.map(({rule,food,place,subdivision})=>{
+                  const useAmount=Math.min(food.quantity,rule.amount);
+                  const nextQuantity=Math.max(0,Number((food.quantity-useAmount).toFixed(3)));
+                  return <article key={rule.id} className="smart-suggestion">
+                    <div className="smart-suggestion-copy"><strong>{food.name}</strong><small>{place.name} · {subdivision.name} · previsto: {formatQuantity(rule.amount,food.unit)} a cada {rule.period_days} dias</small><p>Estoque atual: {formatQuantity(food.quantity,food.unit)}. Confirmando, ficará com {formatQuantity(nextQuantity,food.unit)}.</p></div>
+                    <div className="smart-suggestion-actions">
+                      <button className="primary" onClick={()=>void handleConsumptionSuggestion(rule,true)}>Confirmar consumo</button>
+                      <button className="secondary-action" onClick={()=>void handleConsumptionSuggestion(rule,false)}>Adiar</button>
+                      <button className="tertiary-action" onClick={()=>setConsumptionRuleModal({foodId:food.id})}>Editar regra</button>
+                    </div>
+                  </article>
+                })}
+              </div>
+            </section>}
+
+            {!search&&expiringFoods.length>0&&<section className="expiry-panel">
+              <div className="smart-panel-heading"><div><p className="eyebrow">REDUZA O DESPERDÍCIO</p><h3>Validade próxima</h3><p>Itens vencidos ou que vencem nos próximos 7 dias.</p></div><span>{expiringFoods.length}</span></div>
+              <div className="expiry-items">
+                {expiringFoods.slice(0,5).map(({food,place,subdivision,days})=><div className="expiry-item" key={food.id}>
+                  <div className="expiry-item-copy"><strong>{food.name}</strong><small>{formatQuantity(food.quantity,food.unit)} · {place.name} · {subdivision.name}</small></div>
+                  <span className={'expiry-label '+(days<0?'expired':days<=3?'urgent':'')}>{expiryCaption(food.expires_on!)}</span>
+                  <button type="button" className="tertiary-action" onClick={()=>openSearchResult(place.id,subdivision.id)}>Ver</button>
+                </div>)}
+              </div>
+            </section>}
 
             {search?(
               <>
@@ -1508,6 +1554,13 @@ function App(){
       {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{const ok=await removePlace(id);if(ok){setPlaceModal(false);setPlaceToEdit(null)}return ok}}/>}
       {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
       {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+      {consumptionRuleModal&&<ConsumptionRuleModal
+        food={places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods)).find(food=>food.id===consumptionRuleModal.foodId)}
+        rule={consumptionRules.find(rule=>rule.food_id===consumptionRuleModal.foodId)}
+        onClose={()=>setConsumptionRuleModal(null)}
+        onSave={saveConsumptionRule}
+        onDelete={()=>removeConsumptionRule(consumptionRuleModal.foodId)}
+      />}
       {shoppingStockItem&&<ShoppingStockModal
         item={shoppingStockItem}
         places={places}
@@ -1558,6 +1611,31 @@ function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>voi
     <button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>
     {mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}
     <button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button>
+  </Modal>
+}
+
+function ConsumptionRuleModal({food,rule,onClose,onSave,onDelete}:{food?:Food;rule?:ConsumptionRule;onClose:()=>void;onSave:(foodId:string,amount:number,periodDays:number,threshold:number|null,restockQuantity:number|null)=>void;onDelete:()=>void}){
+  const[amount,setAmount]=useState(rule?.amount??1);
+  const[periodDays,setPeriodDays]=useState(rule?.period_days??7);
+  const[threshold,setThreshold]=useState(rule?.low_stock_threshold===null||rule?.low_stock_threshold===undefined?'':String(rule.low_stock_threshold));
+  const[restockQuantity,setRestockQuantity]=useState(rule?.restock_quantity===null||rule?.restock_quantity===undefined?'':String(rule.restock_quantity));
+  if(!food)return <Modal title="Programar consumo" onClose={onClose}><p className="modal-help">Este alimento não está mais no estoque.</p></Modal>;
+  const step=food.unit==='kg'||food.unit==='L'?0.1:1;
+  const canSave=Number.isFinite(amount)&&amount>0&&Number.isInteger(periodDays)&&periodDays>=1&&periodDays<=365&&(!threshold.trim()||(Number.isFinite(Number(threshold))&&Number(threshold)>=0))&&(!restockQuantity.trim()||(Number.isFinite(Number(restockQuantity))&&Number(restockQuantity)>0));
+  return <Modal title={rule?'Editar consumo previsto':'Programar consumo'} onClose={onClose}>
+    <div className="move-current"><span>Alimento</span><strong>{food.name}</strong><small>Estoque atual: {formatQuantity(food.quantity,food.unit)}</small></div>
+    <p className="modal-help">Defina uma previsão. O OrganizaApp vai sugerir a baixa; o estoque só muda quando você confirmar.</p>
+    <div className="row">
+      <label>Quantidade por ciclo<input type="number" min="0.01" step={step} value={amount} onChange={e=>setAmount(Number(e.target.value))}/></label>
+      <label>Repetir a cada (dias)<input type="number" min="1" max="365" step="1" value={periodDays} onChange={e=>setPeriodDays(Number(e.target.value))}/></label>
+    </div>
+    <div className="consumption-rule-help">Exemplo: 1 caixa a cada 7 dias. Se tiver 3, o app sugere atualizar para 2 após a confirmação.</div>
+    <div className="row">
+      <label>Alertar com estoque em<input type="number" min="0" step={step} value={threshold} onChange={e=>setThreshold(e.target.value)} placeholder="Opcional"/></label>
+      <label>Adicionar à lista de compras<input type="number" min="0.01" step={step} value={restockQuantity} onChange={e=>setRestockQuantity(e.target.value)} placeholder="Opcional"/></label>
+    </div>
+    <button className="primary full" disabled={!canSave} onClick={()=>onSave(food.id,amount,periodDays,threshold.trim()?Number(threshold):null,restockQuantity.trim()?Number(restockQuantity):null)}>{rule?'Salvar programação':'Ativar consumo previsto'}</button>
+    {rule&&<button className="text-danger" onClick={onDelete}><Trash2 size={15}/> Remover programação</button>}
   </Modal>
 }
 
