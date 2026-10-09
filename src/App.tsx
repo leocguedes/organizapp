@@ -1406,7 +1406,7 @@ function App(){
       if(!locationOk)syncError('Local salvo neste dispositivo. Ele será sincronizado quando a conexão voltar.');
       if(newSub){
         const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:newSub.id,data:{id:newSub.id,user_id:userId,location_id:placeId,name:newSub.name}});
-        if(!subOk)syncError('Local salvo neste dispositivo. A divisão inicial será sincronizada quando a conexão voltar.');
+        if(!subOk)syncError('Local salvo neste dispositivo. O local será sincronizado quando a conexão voltar.');
       }
     }
     setPlaceModal(false);
@@ -2188,7 +2188,6 @@ function PlaceModal({places,initialEditId,onClose,onSave,onDelete}:{places:Place
               <div key={p.id}>
                 <span>
                   <strong>{p.name}</strong>
-                  <small>{p.subdivisions.length} {p.subdivisions.length===1?'divisão':'divisões'}</small>
                 </span>
                 <div>
                   <button onClick={()=>{setEdit(p);setName(p.name)}} title={'Renomear '+p.name} aria-label={'Renomear '+p.name}><Edit3 size={16}/></button>
