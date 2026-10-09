@@ -88,6 +88,28 @@ function writeLocalPlaces(userId:string|null,places:Place[]){
   catch{}
 }
 
+function placesCacheSignature(places:Place[]){
+  return JSON.stringify([...places].sort((a,b)=>a.id.localeCompare(b.id)).map(place=>({
+    ...place,
+    subdivisions:[...place.subdivisions].sort((a,b)=>a.id.localeCompare(b.id)).map(sub=>({
+      ...sub,
+      foods:[...sub.foods].sort((a,b)=>a.id.localeCompare(b.id))
+    }))
+  })));
+}
+
+function clearLegacyCachesIfMatching(userId:string,places:Place[]){
+  const signature=placesCacheSignature(places);
+  try{
+    const anonymous=readStoredPlaces(anonymousLocalKey);
+    if(anonymous&&placesCacheSignature(anonymous)===signature)localStorage.removeItem(anonymousLocalKey);
+    if(getLocalOwner()===userId){
+      const legacy=readStoredPlaces(legacyLocalKey);
+      if(legacy&&placesCacheSignature(legacy)===signature)localStorage.removeItem(legacyLocalKey);
+    }
+  }catch{}
+}
+
 function readRecentFoods(userId:string|null):RecentFood[]{
   try{
     const raw=JSON.parse(localStorage.getItem(userId?userRecentFoodsKey(userId):recentFoodsKey)||'[]');
