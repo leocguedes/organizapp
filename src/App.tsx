@@ -923,19 +923,24 @@ function App(){
     }finally{setHouseholdBusy(false)}
   }
 
-  async function addRecipeMissing(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'>[]){
+  async function addRecipeMissing(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'|'measureText'>[]){
     if(!userId||!householdId){
       setAuthMessage('Entre na sua conta para adicionar ingredientes à lista de compras.');
       setAuthModal(true);
       return;
     }
-    for(const item of items)await addShoppingItem(item.name,item.quantity,item.unit,'recipe');
+    for(const item of items)await addShoppingItem(item.name,item.quantity,item.unit,'recipe',item.measureText?('Medida da receita: '+item.measureText):undefined);
     setSelected(null);
     setWorkspace('shopping');
     setAuthMessage(items.length+' '+(items.length===1?'ingrediente adicionado':'ingredientes adicionados')+' à lista de compras.');
   }
 
   async function cookRecipe(recipe:Recipe){
+    if(recipe.presenceOnly){
+      setCookConfirmRecipe(null);
+      setAuthMessage('Receitas externas não descontam o estoque automaticamente, pois as quantidades precisam ser conferidas na fonte.');
+      return;
+    }
     const pantry:RecipePantryItem[]=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods));
     const statuses=getRecipeIngredientStatuses(recipe,pantry);
     if(statuses.some(status=>status.enough!==true)){
@@ -1127,7 +1132,7 @@ function App(){
     if(targetUser&&targetHousehold)writeShoppingCache(targetUser,targetHousehold,next);
   }
 
-  async function addShoppingItem(name:string,quantity:number,unit:Unit,source:'manual'|'low_stock'|'recurring'|'recipe'|'meal_plan'='manual'){
+  async function addShoppingItem(name:string,quantity:number,unit:Unit,source:'manual'|'low_stock'|'recurring'|'recipe'|'meal_plan'='manual',notes?:string){
     const clean=name.trim();
     if(!clean||!Number.isFinite(quantity)||quantity<=0)return;
     if(!userId||!householdId){
@@ -1139,15 +1144,15 @@ function App(){
     const duplicate=currentItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
     if(duplicate){
       const nextQuantity=Number((duplicate.quantity+quantity).toFixed(3));
-      const next=currentItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source}:item);
+      const next=currentItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source,...(notes?{notes}:{})}:item);
       persistShopping(next);
-      const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity,...(source!=='manual'?{source}:{})}});
+      const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity,...(source!=='manual'?{source}:{}),...(notes?{notes}:{})}});
       if(!ok)syncError('Quantidade atualizada na lista deste dispositivo; será sincronizada quando a conexão voltar.');
       return;
     }
     const item:ShoppingItem={
       id:uid(),household_id:householdId,name:clean,quantity,unit,
-      is_purchased:false,source,created_by:userId,created_at:new Date().toISOString()
+      is_purchased:false,source,created_by:userId,created_at:new Date().toISOString(),...(notes?{notes}:{})
     };
     persistShopping([item,...currentItems]);
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'upsert',rowId:item.id,data:item as unknown as Record<string,unknown>});
@@ -1850,12 +1855,31 @@ function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>voi
   </Modal>
 }
 
-function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'>[])=>void;onCook:(recipe:Recipe)=>void}){
+function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'|'measureText'>[])=>void;onCook:(recipe:Recipe)=>void}){
   const[query,setQuery]=useState('');
   const[filter,setFilter]=useState<'all'|'ready'|'needs'>('all');
   const[expanded,setExpanded]=useState<string|null>(null);
+  const[onlineRecipes,setOnlineRecipes]=useState<Recipe[]>([]);
+  const[onlineLoading,setOnlineLoading]=useState(false);
+  const[onlineError,setOnlineError]=useState('');
+  const[onlineLoaded,setOnlineLoaded]=useState(false);
   const pantry:RecipePantryItem[]=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods));
-  const options=recipes.map(recipe=>{
+  async function loadOnlineRecipes(){
+    if(!pantry.length){setOnlineError('Adicione alguns alimentos ao estoque para buscar receitas compatíveis.');return;}
+    setOnlineLoading(true);setOnlineError('');
+    try{
+      const{data,error}=await supabase.functions.invoke('recipe-suggestions',{body:{ingredients:pantry.map(item=>item.name).filter(Boolean)}});
+      if(error)throw error;
+      const found=Array.isArray(data?.recipes)?data.recipes as Recipe[]:[];
+      setOnlineRecipes(found);
+      setOnlineLoaded(true);
+      if(!found.length)setOnlineError('Não encontramos receitas online para os ingredientes cadastrados. Tente adicionar ingredientes mais comuns.');
+    }catch{
+      setOnlineError('Não foi possível consultar as receitas online agora. Tente novamente em instantes.');
+    }finally{setOnlineLoading(false);}
+  }
+  const allRecipes=[...recipes,...onlineRecipes];
+  const options=allRecipes.map(recipe=>{
     const statuses=getRecipeIngredientStatuses(recipe,pantry);
     const ready=statuses.every(status=>status.enough===true);
     const available=statuses.filter(status=>status.enough===true||status.enough===null).length;
@@ -1880,6 +1904,11 @@ function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(i
       </div>
       <div className="shopping-summary"><strong>{options.filter(option=>option.ready).length}</strong><span>{options.filter(option=>option.ready).length===1?'receita pronta':'receitas prontas'}</span></div>
     </div>
+    <div className="recipe-online-controls">
+      <button className="secondary-action" onClick={()=>void loadOnlineRecipes()} disabled={onlineLoading}><BookOpen size={16}/>{onlineLoading?'Buscando receitas...':onlineLoaded?'Atualizar sugestões online':'Buscar mais receitas online'}</button>
+      <span>Novas ideias do TheMealDB, combinadas com seu estoque.</span>
+    </div>
+    {onlineError&&<p className="recipe-online-message" role="status">{onlineError}</p>}
     <div className="recipe-search search"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar receita ou ingrediente" aria-label="Buscar receita ou ingrediente"/>{query&&<button onClick={()=>setQuery('')} aria-label="Limpar busca"><X size={16}/></button>}</div>
     <div className="recipe-filters" aria-label="Filtrar receitas">
       <button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>Todas ({options.length})</button>
@@ -1889,11 +1918,12 @@ function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(i
     {filtered.length===0?<div className="shopping-empty"><BookOpen size={25}/><strong>Nenhuma receita encontrada</strong><span>Tente outra busca ou selecione outro filtro.</span></div>:<div className="recipe-grid">
       {filtered.map(({recipe,statuses,ready,available,unknown,missing,expiring})=>{
         const isExpanded=expanded===recipe.id;
-        const missingItems=missing.map(status=>({name:status.ingredient.name,quantity:Number(status.missingQuantity.toFixed(3)),unit:status.ingredient.unit}));
+        const missingItems=missing.map(status=>({name:status.ingredient.name,quantity:Number(status.missingQuantity.toFixed(3)),unit:status.ingredient.unit,...(status.ingredient.measureText?{measureText:status.ingredient.measureText}:{})}));
         return <article className="recipe-card" key={recipe.id}>
-          <div className="recipe-card-top"><div><p className="eyebrow">{ready?'PRONTO PARA PREPARAR':expiring?'USE O QUE VENCE PRIMEIRO':'IDEIA PARA HOJE'}</p><h3>{recipe.name}</h3></div><span className={'recipe-status '+(ready?'ready':'')}>{ready?'Você tem tudo':available+'/'+recipe.ingredients.length+' itens'}</span></div>
+          <div className="recipe-card-top"><div><p className="eyebrow">{recipe.source?'RECEITA DO THEMEALDB':ready?'PRONTO PARA PREPARAR':expiring?'USE O QUE VENCE PRIMEIRO':'IDEIA PARA HOJE'}</p><h3>{recipe.name}</h3></div><span className={'recipe-status '+(ready?'ready':'')}>{ready?'Você tem tudo':available+'/'+recipe.ingredients.length+' itens'}</span></div>
           <p className="recipe-description">{recipe.description}</p>
-          <div className="recipe-meta"><span>{recipe.minutes} min</span><span>{recipe.servings} {recipe.servings===1?'porção':'porções'}</span><span>{available} de {recipe.ingredients.length} ingredientes encontrados</span></div>
+          {recipe.sourceUrl&&<p className="recipe-source"><a href={recipe.sourceUrl} target="_blank" rel="noreferrer">Ver receita original no TheMealDB <MoveRight size={13}/></a></p>}
+          <div className="recipe-meta"><span>{recipe.minutes>0?recipe.minutes+' min':'Tempo não informado'}</span><span>{recipe.servings>0?recipe.servings+' '+(recipe.servings===1?'porção':'porções'):'Porções não informadas'}</span><span>{available} de {recipe.ingredients.length} ingredientes encontrados</span></div>
           <div className="recipe-progress"><span style={{width:Math.round(available/recipe.ingredients.length*100)+'%'}}/></div>
           {unknown>0&&<p className="recipe-hint">{unknown} ingrediente(s) existe(m), mas usa(m) outra unidade. Confira a quantidade antes de cozinhar.</p>}
           <button className="recipe-detail-toggle" onClick={()=>setExpanded(isExpanded?null:recipe.id)}>{isExpanded?'Ocultar receita':'Ver ingredientes e preparo'} <ChevronRight size={16}/></button>
@@ -1901,20 +1931,21 @@ function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(i
             <div className="recipe-ingredients"><strong>Ingredientes</strong>
               {statuses.map(status=><div className="recipe-ingredient" key={status.ingredient.name}>
                 <span className={'recipe-ingredient-icon '+(status.enough===true?'available':status.enough===false?'missing':'unknown')}>{status.enough===true?'✓':status.enough===false?'!':'?'}</span>
-                <div><strong>{status.ingredient.name}</strong><small>{formatQuantity(status.ingredient.quantity,status.ingredient.unit)}{status.enough===true?' · disponível':status.enough===false?' · falta '+formatQuantity(status.missingQuantity,status.ingredient.unit):' · confira a unidade'}{status.expiredMatches.length>0?(status.matches.length?' · também há item vencido':' · só há item vencido'):''}</small></div>
+                <div><strong>{status.ingredient.name}</strong><small>{recipe.presenceOnly?(status.ingredient.measureText||'Quantidade não informada')+(status.enough===true?' · presente no estoque; confira a quantidade':status.enough===false?' · não encontrado no estoque':'') : formatQuantity(status.ingredient.quantity,status.ingredient.unit)+(status.enough===true?' · disponível':status.enough===false?' · falta '+formatQuantity(status.missingQuantity,status.ingredient.unit):' · confira a unidade')}{status.expiredMatches.length>0?(status.matches.length?' · também há item vencido':' · só há item vencido'):''}</small></div>
               </div>)}
             </div>
             <div className="recipe-steps"><strong>Modo de preparo</strong><ol>{recipe.instructions.map((step,index)=><li key={index}>{step}</li>)}</ol></div>
             <div className="recipe-actions">
               {missingItems.length>0&&<button className="secondary-action" onClick={()=>onAddMissing(missingItems)}><ShoppingCart size={15}/> Adicionar faltantes à lista</button>}
-              <button className="primary" disabled={!ready} onClick={()=>onCook(recipe)}>Marcar como preparada</button>
-              {!ready&&<small>Para descontar o estoque, todos os ingredientes precisam estar disponíveis em quantidade e unidade comparáveis.</small>}
+              {!recipe.presenceOnly&&<button className="primary" disabled={!ready} onClick={()=>onCook(recipe)}>Marcar como preparada</button>}
+              {recipe.presenceOnly&&<small>Receita externa: confira as medidas na fonte. O estoque não será descontado automaticamente.</small>}
+              {!ready&&!recipe.presenceOnly&&<small>Para descontar o estoque, todos os ingredientes precisam estar disponíveis em quantidade e unidade comparáveis.</small>}
             </div>
           </div>}
         </article>;
       })}
     </div>}
-    <p className="recipe-disclaimer">Catálogo inicial integrado ao estoque. As quantidades são estimativas para as porções indicadas; revise a receita antes de preparar.</p>
+    <p className="recipe-disclaimer">As sugestões online vêm do TheMealDB e podem estar no idioma original. Para receitas externas, confira as medidas e o preparo na fonte antes de cozinhar.</p>
   </section>
 }
 

@@ -69,3 +69,17 @@ test('reports absent ingredients as missing', () => {
   assert.equal(statuses[0].enough, false);
   assert.equal(statuses[0].missingQuantity, 2);
 });
+
+
+test('external recipes match ingredients by presence without guessing quantities', () => {
+  const externalRecipe = {
+    ...recipe(ingredient('Chicken', 1, 'unidades', ['frango'])),
+    presenceOnly: true,
+  };
+  const statuses = getRecipeIngredientStatuses(externalRecipe, [
+    { id: 'a', name: 'Frango congelado', quantity: 500, unit: 'g' },
+  ]);
+  assert.equal(statuses[0].enough, true);
+  assert.equal(statuses[0].comparable, false);
+  assert.equal(statuses[0].missingQuantity, 0);
+});
