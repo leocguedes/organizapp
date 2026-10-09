@@ -13,7 +13,7 @@ const normalize = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 const ingredientSearchMap: Array<{ terms: string[]; api: string }> = [
-  { terms: ["peito de frango", "frango"], api: "chicken_breast" },
+  { terms: ["peito de frango", "frango", "chicken breast", "chicken"], api: "chicken_breast" },
   { terms: ["carne moida", "carne bovina", "carne de boi", "beef"], api: "beef" },
   { terms: ["carne de porco", "porco", "pork"], api: "pork" },
   { terms: ["ovo", "ovos", "egg"], api: "egg" },
