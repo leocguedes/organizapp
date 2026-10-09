@@ -453,3 +453,41 @@ header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur
   .recipe-filters{gap:5px}
   .recipe-filters button{font-size:10px;padding:8px 10px}
 }
+
+
+/* Recurring grocery schedules */
+.recurring-panel{border:1px solid #dfe7dc;background:#fffdf9;border-radius:15px;margin:0 0 27px;overflow:hidden}
+.recurring-panel>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;cursor:pointer}
+.recurring-panel>summary::-webkit-details-marker{display:none}
+.recurring-panel>summary>span{display:flex;flex-direction:column;gap:3px}
+.recurring-panel>summary strong{font-size:13px;color:#405146}
+.recurring-panel>summary small{font-size:10px;color:#89958d}
+.recurring-panel>summary>b{display:grid;place-items:center;min-width:25px;height:25px;padding:0 7px;border-radius:8px;background:#e8f0e5;color:#547356;font-size:11px}
+.recurring-panel[open]>summary{border-bottom:1px solid #e4ebe1;background:#f7f9f5}
+.recurring-form{padding:14px 15px;border-bottom:1px solid #edf1eb}
+.recurring-form>strong{display:block;font-size:12px;color:#526357;margin-bottom:12px}
+.recurring-form label{display:flex;flex-direction:column;gap:6px;margin-bottom:11px;min-width:0;color:#67766b;font-size:10px;font-weight:700}
+.recurring-form input,.recurring-form select{width:100%;min-width:0;height:40px;border:1px solid #dce3da;border-radius:9px;padding:0 10px;background:white;font:12px 'DM Sans',sans-serif}
+.recurring-form-row{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.recurring-form-actions{display:flex;gap:8px;align-items:center}
+.recurring-form-actions .primary{font-size:11px;padding:9px 12px}
+.recurring-note{display:block;margin-top:10px;color:#89958d;font-size:10px;line-height:1.45}
+.recurring-rules{display:flex;flex-direction:column;padding:3px 12px}
+.recurring-rule{display:flex;align-items:center;gap:10px;padding:12px 3px;border-bottom:1px solid #edf1eb}
+.recurring-rule:last-child{border-bottom:0}
+.recurring-rule.inactive{opacity:.6}
+.recurring-rule-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.recurring-rule-copy strong{font-size:12px;color:#44554a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recurring-rule-copy small{font-size:10px;color:#89958d}
+.recurring-rule-actions{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.recurring-rule-actions button{border:1px solid #e0e7dd;background:#fffdf9;color:#6a7b6e;border-radius:8px;padding:6px 8px;font:600 9px 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap}
+.recurring-rule-actions button:last-child{display:grid;place-items:center;padding:6px;color:#9d7a74}
+.recurring-rule-actions button:hover{background:#eef4eb}
+.recurring-empty{padding:0 15px 14px;margin:0;font-size:11px;line-height:1.5;color:#89958d}
+@media(max-width:600px){
+  .recurring-form,.recurring-panel>summary{padding-left:12px;padding-right:12px}
+  .recurring-rule{align-items:flex-start;flex-direction:column}
+  .recurring-rule-copy{width:100%}
+  .recurring-rule-actions{width:100%}
+  .recurring-rule-actions button{flex:1}
+}
