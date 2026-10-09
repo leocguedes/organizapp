@@ -102,11 +102,13 @@ function clearLegacyCachesIfMatching(userId:string,places:Place[]){
   const signature=placesCacheSignature(places);
   try{
     const anonymous=readStoredPlaces(anonymousLocalKey);
-    if(anonymous&&placesCacheSignature(anonymous)===signature)localStorage.removeItem(anonymousLocalKey);
-    if(getLocalOwner()===userId){
-      const legacy=readStoredPlaces(legacyLocalKey);
-      if(legacy&&placesCacheSignature(legacy)===signature)localStorage.removeItem(legacyLocalKey);
+    const legacy=getLocalOwner()===userId?readStoredPlaces(legacyLocalKey):null;
+    const anonymousSignature=anonymous?placesCacheSignature(anonymous):null;
+    const legacySignature=legacy?placesCacheSignature(legacy):null;
+    if(anonymous&&(anonymousSignature===signature||(legacySignature&&anonymousSignature===legacySignature))){
+      localStorage.removeItem(anonymousLocalKey);
     }
+    if(legacy&&legacySignature===signature)localStorage.removeItem(legacyLocalKey);
   }catch{}
 }
 
