@@ -4,7 +4,7 @@ import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
 import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
 import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
-import{Apple,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{Apple,BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
@@ -1344,7 +1344,8 @@ function App(){
 
         {!selected&&<nav className="workspace-nav" aria-label="Áreas do OrganizaApp">
           <button className={workspace==='inventory'?'active':''} onClick={()=>setWorkspace('inventory')}><Box size={17}/> Estoque</button>
-          <button className={workspace==='shopping'?'active':''} onClick={()=>setWorkspace('shopping')}><ShoppingCart size={17}/> Lista de compras{shoppingItems.filter(item=>!item.is_purchased).length>0&&<span>{shoppingItems.filter(item=>!item.is_purchased).length}</span>}</button>
+          <button className={workspace==='shopping'?'active':''} onClick={()=>setWorkspace('shopping')}><ShoppingCart size={17}/> Compras{shoppingItems.filter(item=>!item.is_purchased).length>0&&<span>{shoppingItems.filter(item=>!item.is_purchased).length}</span>}</button>
+          <button className={workspace==='recipes'?'active':''} onClick={()=>setWorkspace('recipes')}><BookOpen size={17}/> Receitas</button>
         </nav>}
 
         {selected?(
@@ -1466,6 +1467,8 @@ function App(){
             onStock={item=>setShoppingStockItem(item)}
             onSignIn={()=>setAuthModal(true)}
           />
+        ):workspace==='recipes'?(
+          <RecipePage places={places} onAddMissing={addRecipeMissing} onCook={recipe=>setCookConfirmRecipe(recipe)}/>
         ):(
           <section>
             <div className="hero">
@@ -1621,6 +1624,7 @@ function App(){
       {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{const ok=await removePlace(id);if(ok){setPlaceModal(false);setPlaceToEdit(null)}return ok}}/>}
       {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
       {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+      {cookConfirmRecipe&&<RecipeCookModal recipe={cookConfirmRecipe} onClose={()=>setCookConfirmRecipe(null)} onConfirm={()=>void cookRecipe(cookConfirmRecipe)}/>}
       {consumptionRuleModal&&<ConsumptionRuleModal
         food={places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods)).find(food=>food.id===consumptionRuleModal.foodId)}
         rule={consumptionRules.find(rule=>rule.food_id===consumptionRuleModal.foodId)}
@@ -1678,6 +1682,83 @@ function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>voi
     <button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>
     {mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}
     <button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button>
+  </Modal>
+}
+
+function RecipePage({places,onAddMissing,onCook}:{places:Place[];onAddMissing:(items:Pick<RecipeIngredient,'name'|'quantity'|'unit'>[])=>void;onCook:(recipe:Recipe)=>void}){
+  const[query,setQuery]=useState('');
+  const[filter,setFilter]=useState<'all'|'ready'|'needs'>('all');
+  const[expanded,setExpanded]=useState<string|null>(null);
+  const pantry:RecipePantryItem[]=places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods));
+  const options=recipes.map(recipe=>{
+    const statuses=getRecipeIngredientStatuses(recipe,pantry);
+    const ready=statuses.every(status=>status.enough===true);
+    const available=statuses.filter(status=>status.enough===true||status.enough===null).length;
+    const unknown=statuses.filter(status=>status.enough===null).length;
+    const missing=statuses.filter(status=>status.enough===false);
+    const expiring=statuses.filter(status=>status.matches.some(item=>!!item.expires_on&&daysUntilExpiry(item.expires_on)<=3)).length;
+    return{recipe,statuses,ready,available,unknown,missing,expiring};
+  });
+  const q=searchKey(query.trim());
+  const filtered=options.filter(option=>{
+    const recipe=option.recipe;
+    const matchesQuery=!q||searchKey(recipe.name+' '+recipe.description+' '+recipe.ingredients.map(i=>i.name+' '+i.aliases.join(' ')).join(' ')).includes(q);
+    const matchesFilter=filter==='all'||(filter==='ready'?option.ready:!option.ready);
+    return matchesQuery&&matchesFilter;
+  }).sort((a,b)=>Number(b.ready)-Number(a.ready)||b.expiring-a.expiring||b.available-a.available||a.recipe.minutes-b.recipe.minutes);
+  return <section className="recipe-page">
+    <div className="hero recipe-hero">
+      <div className="hero-copy">
+        <p className="eyebrow">COZINHE COM O QUE JÁ TEM</p>
+        <h2>Ideias para a sua cozinha.</h2>
+        <p>As receitas priorizam ingredientes no estoque e alimentos próximos da validade. O que faltar pode ir direto para a lista de compras.</p>
+      </div>
+      <div className="shopping-summary"><strong>{options.filter(option=>option.ready).length}</strong><span>{options.filter(option=>option.ready).length===1?'receita pronta':'receitas prontas'}</span></div>
+    </div>
+    <div className="recipe-search search"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar receita ou ingrediente" aria-label="Buscar receita ou ingrediente"/>{query&&<button onClick={()=>setQuery('')} aria-label="Limpar busca"><X size={16}/></button>}</div>
+    <div className="recipe-filters" aria-label="Filtrar receitas">
+      <button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>Todas ({options.length})</button>
+      <button className={filter==='ready'?'active':''} onClick={()=>setFilter('ready')}>Tenho tudo ({options.filter(option=>option.ready).length})</button>
+      <button className={filter==='needs'?'active':''} onClick={()=>setFilter('needs')}>Faltam itens ({options.filter(option=>!option.ready).length})</button>
+    </div>
+    {filtered.length===0?<div className="shopping-empty"><BookOpen size={25}/><strong>Nenhuma receita encontrada</strong><span>Tente outra busca ou selecione outro filtro.</span></div>:<div className="recipe-grid">
+      {filtered.map(({recipe,statuses,ready,available,unknown,missing,expiring})=>{
+        const isExpanded=expanded===recipe.id;
+        const missingItems=missing.map(status=>({name:status.ingredient.name,quantity:Number(status.missingQuantity.toFixed(3)),unit:status.ingredient.unit}));
+        return <article className="recipe-card" key={recipe.id}>
+          <div className="recipe-card-top"><div><p className="eyebrow">{ready?'PRONTO PARA PREPARAR':expiring?'USE O QUE VENCE PRIMEIRO':'IDEIA PARA HOJE'}</p><h3>{recipe.name}</h3></div><span className={'recipe-status '+(ready?'ready':'')}>{ready?'Você tem tudo':available+'/'+recipe.ingredients.length+' itens'}</span></div>
+          <p className="recipe-description">{recipe.description}</p>
+          <div className="recipe-meta"><span>{recipe.minutes} min</span><span>{recipe.servings} {recipe.servings===1?'porção':'porções'}</span><span>{available} de {recipe.ingredients.length} ingredientes encontrados</span></div>
+          <div className="recipe-progress"><span style={{width:Math.round(available/recipe.ingredients.length*100)+'%'}}/></div>
+          {unknown>0&&<p className="recipe-hint">{unknown} ingrediente(s) existe(m), mas usa(m) outra unidade. Confira a quantidade antes de cozinhar.</p>}
+          <button className="recipe-detail-toggle" onClick={()=>setExpanded(isExpanded?null:recipe.id)}>{isExpanded?'Ocultar receita':'Ver ingredientes e preparo'} <ChevronRight size={16}/></button>
+          {isExpanded&&<div className="recipe-detail">
+            <div className="recipe-ingredients"><strong>Ingredientes</strong>
+              {statuses.map(status=><div className="recipe-ingredient" key={status.ingredient.name}>
+                <span className={'recipe-ingredient-icon '+(status.enough===true?'available':status.enough===false?'missing':'unknown')}>{status.enough===true?'✓':status.enough===false?'!':'?'}</span>
+                <div><strong>{status.ingredient.name}</strong><small>{formatQuantity(status.ingredient.quantity,status.ingredient.unit)}{status.enough===true?' · disponível':status.enough===false?' · falta '+formatQuantity(status.missingQuantity,status.ingredient.unit):' · confira a unidade'}{status.expiredMatches.length>0?' · só há item vencido':''}</small></div>
+              </div>)}
+            </div>
+            <div className="recipe-steps"><strong>Modo de preparo</strong><ol>{recipe.instructions.map((step,index)=><li key={index}>{step}</li>)}</ol></div>
+            <div className="recipe-actions">
+              {missingItems.length>0&&<button className="secondary-action" onClick={()=>onAddMissing(missingItems)}><ShoppingCart size={15}/> Adicionar faltantes à lista</button>}
+              <button className="primary" disabled={!ready} onClick={()=>onCook(recipe)}>Marcar como preparada</button>
+              {!ready&&<small>Para descontar o estoque, todos os ingredientes precisam estar disponíveis em quantidade e unidade comparáveis.</small>}
+            </div>
+          </div>}
+        </article>;
+      })}
+    </div>}
+    <p className="recipe-disclaimer">Catálogo inicial integrado ao estoque. As quantidades são estimativas para as porções indicadas; revise a receita antes de preparar.</p>
+  </section>
+}
+
+function RecipeCookModal({recipe,onClose,onConfirm}:{recipe:Recipe;onClose:()=>void;onConfirm:()=>void}){
+  return <Modal title="Marcar receita como preparada" onClose={onClose}>
+    <div className="move-current"><span>Receita</span><strong>{recipe.name}</strong><small>{recipe.servings} {recipe.servings===1?'porção':'porções'} · {recipe.minutes} min</small></div>
+    <p className="modal-help">O OrganizaApp vai descontar as quantidades previstas do estoque, priorizando os alimentos com validade mais próxima. Nada será descontado se faltar ingrediente ou não for possível comparar as unidades.</p>
+    <div className="recipe-cook-list">{recipe.ingredients.map(ingredient=><div key={ingredient.name}><span>{ingredient.name}</span><strong>{formatQuantity(ingredient.quantity,ingredient.unit)}</strong></div>)}</div>
+    <button className="primary full" onClick={onConfirm}>Confirmar preparo e atualizar estoque</button>
   </Modal>
 }
 
