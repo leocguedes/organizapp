@@ -524,6 +524,9 @@ function App(){
     setShoppingLoading(true);
     void (async()=>{
       try{
+        const{error:recurringError}=await supabase.rpc('materialize_due_recurring_shopping_items',{target_household_id:activeHouse});
+        if(!active)return;
+        if(recurringError)setAuthMessage('Não foi possível atualizar as reposições recorrentes agora.');
         const{data,error}=await supabase.from('shopping_items').select('*')
           .eq('household_id',activeHouse)
           .order('is_purchased',{ascending:true})
@@ -861,6 +864,47 @@ function App(){
       }
     }
     setAuthMessage('Receita marcada como preparada. O estoque foi atualizado.');
+  }
+
+  async function saveRecurringRule(input:{name:string;quantity:number;unit:Unit;frequencyDays:number;nextDueOn:string;id?:string}){
+    if(!userId||!householdId){
+      setAuthMessage('Entre na sua conta para configurar reposições recorrentes.');
+      setAuthModal(true);
+      return;
+    }
+    const name=input.name.trim();
+    if(!name||!Number.isFinite(input.quantity)||input.quantity<=0||!Number.isInteger(input.frequencyDays)||input.frequencyDays<1||input.frequencyDays>365)return;
+    setRecurringRuleBusy(true);
+    const existing=recurringRules.find(rule=>rule.id===input.id);
+    const rule:RecurringShoppingRule={
+      id:existing?.id||uid(),
+      household_id:householdId,
+      name,quantity:input.quantity,unit:input.unit,
+      frequency_days:input.frequencyDays,
+      next_due_on:input.nextDueOn||localDateString(),
+      is_active:true,created_by:existing?.created_by||userId
+    };
+    setRecurringRules(current=>[...current.filter(item=>item.id!==rule.id),rule].sort((a,b)=>a.next_due_on.localeCompare(b.next_due_on)));
+    const ok=await writeOrQueue(userId,{userId,table:'recurring_shopping_items',action:existing?'update':'upsert',rowId:rule.id,data:existing?{
+      name:rule.name,quantity:rule.quantity,unit:rule.unit,frequency_days:rule.frequency_days,next_due_on:rule.next_due_on,is_active:true
+    }:rule as unknown as Record<string,unknown>});
+    if(!ok)syncError('Reposição recorrente salva localmente; será sincronizada quando a conexão voltar.');
+    setRecurringRuleBusy(false);
+  }
+
+  async function toggleRecurringRule(rule:RecurringShoppingRule){
+    if(!userId||!householdId)return;
+    const isActive=!rule.is_active;
+    setRecurringRules(current=>current.map(item=>item.id===rule.id?{...item,is_active:isActive}:item));
+    const ok=await writeOrQueue(userId,{userId,table:'recurring_shopping_items',action:'update',rowId:rule.id,data:{is_active:isActive}});
+    if(!ok)syncError('Estado da reposição atualizado localmente; será sincronizado quando a conexão voltar.');
+  }
+
+  async function deleteRecurringRule(rule:RecurringShoppingRule){
+    if(!userId||!householdId)return;
+    setRecurringRules(current=>current.filter(item=>item.id!==rule.id));
+    const ok=await writeOrQueue(userId,{userId,table:'recurring_shopping_items',action:'delete',rowId:rule.id});
+    if(!ok)syncError('Reposição recorrente removida localmente; será sincronizada quando a conexão voltar.');
   }
 
   async function saveConsumptionRule(foodId:string,amount:number,periodDays:number,threshold:number|null,restockQuantity:number|null){
