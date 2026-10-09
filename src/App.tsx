@@ -660,127 +660,30 @@ function App(){
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
-    const previousOwner=getLocalOwner();
-    const local=readAnonymousPlaces();
     try{
       if(mode==='signup'){
         const{data,error}=await supabase.auth.signUp({email,password,options:{emailRedirectTo:authRedirectUrl()}});
         if(error){setAuthMessage(error.message);return}
-        if(data.user&&data.session&&local.length&&!getLocalOwner()){
-          try{await uploadLocal(data.user.id,local)}catch{setAuthMessage('Conta criada, mas não foi possível sincronizar os dados locais ainda.')}
-        }
-        if(data.session&&data.user){
-          setLocalOwner(data.user.id);
-          const request=++authRequest.current;
-          const{data:cloudData,error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
-          if(request===authRequest.current&&cloudError){
-            const legacyAccountCache=previousOwner===data.user.id?readStoredPlaces(legacyLocalKey):null;
-            const fallback=legacyAccountCache?.length?legacyAccountCache:!previousOwner?local:readLocalPlaces(data.user.id);
-            setPlaces(fallback);
-            writeLocalPlaces(data.user.id,fallback);
-            setSynced(false);
-            setCacheReady(true);
-            setAuthMessage('Conta criada, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
-          }else if(request===authRequest.current){
-            const cloudPlaces=mapCloudPlaces(cloudData||[]);
-            if(!previousOwner&&local.length){
-              setPlaces(local);
-              writeLocalPlaces(data.user.id,local);
-              try{
-                await uploadLocal(data.user.id,local);
-                if(request!==authRequest.current)return;
-                clearLegacyCachesIfMatching(data.user.id,local);
-                setSynced(true);
-                setAuthMessage('Conta criada e dados sincronizados.');
-              }catch{
-                if(request!==authRequest.current)return;
-                setSynced(false);
-                setAuthMessage('Conta criada. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
-              }
-              setCacheReady(true);
-            }else if(cloudPlaces.length){
-              setPlaces(cloudPlaces);
-              writeLocalPlaces(data.user.id,cloudPlaces);
-              setSynced(true);
-              setCacheReady(true);
-              setAuthMessage('Conta criada e dados sincronizados.');
-            }else{
-              const accountCache=readStoredPlaces(userLocalKey(data.user.id));
-              const fallback=accountCache?.length?accountCache:readLocalPlaces(data.user.id);
-              setPlaces(fallback);
-              writeLocalPlaces(data.user.id,fallback);
-              try{
-                await uploadLocal(data.user.id,fallback);
-                if(request!==authRequest.current)return;
-                setSynced(true);
-                setAuthMessage('Conta criada e dados sincronizados.');
-              }catch{
-                if(request!==authRequest.current)return;
-                setSynced(false);
-                setAuthMessage('Conta criada. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
-              }
-              setCacheReady(true);
-            }
-          }
-        }else{
+        if(!data.session||!data.user){
           setAuthMessage('Conta criada. Verifique seu e-mail para confirmar a conta e depois entre novamente.');
+          return;
         }
-        if(data.session)setAuthModal(false);
+        setUser(data.user);
+        setUserId(data.user.id);
+        setRecentFoods(readRecentFoods(data.user.id));
+        await activateHousehold(null,data.user.id,true);
+        setAuthModal(false);
       }else{
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
         if(error){setAuthMessage(error.message);return}
-        let accountFallback=local;
-        if(data.user){
-          const accountCache=readStoredPlaces(userLocalKey(data.user.id));
-          const legacyAccountCache=previousOwner===data.user.id?readStoredPlaces(legacyLocalKey):null;
-          accountFallback=accountCache?.length?accountCache:legacyAccountCache?.length?legacyAccountCache:!previousOwner?local:readLocalPlaces(data.user.id);
-          setCacheReady(false);
-          setLocalOwner(data.user.id);
-          setPlaces(accountFallback);
-          setRecentFoods(readRecentFoods(data.user.id));
+        if(!data.user){
+          setAuthMessage('Não foi possível carregar esta conta. Tente entrar novamente.');
+          return;
         }
-        const request=++authRequest.current;
-        const{data:cloudData, error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
-        if(request===authRequest.current){
-          if(cloudError){
-            setSynced(false);
-            if(data.user)setPlaces(accountFallback);
-            setCacheReady(true);
-            setAuthMessage('Login realizado, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
-          }else{
-            const cloudPlaces=mapCloudPlaces(cloudData||[]);
-            if(cloudPlaces.length){
-              setPlaces(cloudPlaces);
-              if(data.user){
-                writeLocalPlaces(data.user.id,cloudPlaces);
-                clearLegacyCachesIfMatching(data.user.id,cloudPlaces);
-              }
-              setSynced(true);
-              setCacheReady(true);
-              setAuthMessage('Login realizado. Seus dados estão sincronizados.');
-            }else if(data.user){
-              setPlaces(accountFallback);
-              writeLocalPlaces(data.user.id,accountFallback);
-              try{
-                await uploadLocal(data.user.id,accountFallback);
-                if(request!==authRequest.current)return;
-                clearLegacyCachesIfMatching(data.user.id,accountFallback);
-                setSynced(true);
-                setAuthMessage('Login realizado. Seus dados locais foram recuperados e sincronizados.');
-              }catch{
-                if(request!==authRequest.current)return;
-                setSynced(false);
-                setAuthMessage('Login realizado. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
-              }
-              setCacheReady(true);
-            }else{
-              setPlaces(cloudPlaces);
-              setSynced(true);
-              setCacheReady(true);
-              setAuthMessage('Login realizado. Seus dados estão sincronizados.');
-            }
-          }
-        }
+        setUser(data.user);
+        setUserId(data.user.id);
+        setRecentFoods(readRecentFoods(data.user.id));
+        await activateHousehold(null,data.user.id,true);
         setAuthModal(false);
       }
     }finally{setAuthBusy(false)}
@@ -807,6 +710,8 @@ function App(){
       setPlaces(readAnonymousPlaces());
       setUser(null);
       setUserId(null);
+      setHouseholds([]);
+      setHouseholdId(null);
       setSynced(false);
       setAuthMessage(null);
     }finally{setAuthBusy(false)}
