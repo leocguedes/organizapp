@@ -310,6 +310,7 @@ function App(){
         try{
           await uploadLocal(current.id,recoveryCache);
           if(!active||request!==authRequest.current)return;
+          clearLegacyCachesIfMatching(current.id,recoveryCache);
           setSynced(true);
         }catch{
           if(!active||request!==authRequest.current)return;
@@ -325,6 +326,7 @@ function App(){
           if(active&&request===authRequest.current){
             setPlaces(anonymousLocal);
             writeLocalPlaces(current.id,anonymousLocal);
+            clearLegacyCachesIfMatching(current.id,anonymousLocal);
           }
         }catch{
           if(active&&request===authRequest.current){
@@ -335,6 +337,7 @@ function App(){
       }else if(active&&request===authRequest.current){
         setPlaces(cloudPlaces);
         writeLocalPlaces(current.id,cloudPlaces);
+        clearLegacyCachesIfMatching(current.id,cloudPlaces);
       }
       if(active&&request===authRequest.current){
         setSynced(true);
@@ -409,6 +412,7 @@ function App(){
     if(cloudPlaces.length){
       setPlaces(cloudPlaces);
       writeLocalPlaces(userIdToLoad,cloudPlaces);
+      clearLegacyCachesIfMatching(userIdToLoad,cloudPlaces);
       setSynced(true);
       return;
     }
@@ -427,6 +431,7 @@ function App(){
     try{
       await uploadLocal(userIdToLoad,recoveryCache);
       if(request!==authRequest.current||userIdToLoad!==userId)return;
+      clearLegacyCachesIfMatching(userIdToLoad,recoveryCache);
       setSynced(true);
     }catch{
       if(request!==authRequest.current||userIdToLoad!==userId)return;
@@ -515,6 +520,7 @@ function App(){
               try{
                 await uploadLocal(data.user.id,local);
                 if(request!==authRequest.current)return;
+                clearLegacyCachesIfMatching(data.user.id,local);
                 setSynced(true);
                 setAuthMessage('Conta criada e dados sincronizados.');
               }catch{
@@ -576,7 +582,10 @@ function App(){
             const cloudPlaces=mapCloudPlaces(cloudData||[]);
             if(cloudPlaces.length){
               setPlaces(cloudPlaces);
-              if(data.user)writeLocalPlaces(data.user.id,cloudPlaces);
+              if(data.user){
+                writeLocalPlaces(data.user.id,cloudPlaces);
+                clearLegacyCachesIfMatching(data.user.id,cloudPlaces);
+              }
               setSynced(true);
               setCacheReady(true);
               setAuthMessage('Login realizado. Seus dados estão sincronizados.');
@@ -586,6 +595,7 @@ function App(){
               try{
                 await uploadLocal(data.user.id,accountFallback);
                 if(request!==authRequest.current)return;
+                clearLegacyCachesIfMatching(data.user.id,accountFallback);
                 setSynced(true);
                 setAuthMessage('Login realizado. Seus dados locais foram recuperados e sincronizados.');
               }catch{
