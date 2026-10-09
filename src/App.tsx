@@ -2,13 +2,14 @@ import{useEffect,useMemo,useRef,useState}from'react';
 import type{ReactNode}from'react';
 import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
-import{Apple,Box,ChevronRight,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,X}from'lucide-react';
+import{Apple,Box,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
 type Food={id:string;name:string;quantity:number;unit:Unit};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
+type Household={id:string;name:string;created_by:string;is_personal:boolean;role:'owner'|'admin'|'member'};
 type UndoState={label:string;action:()=>void};
 type SyncTable='locations'|'subdivisions'|'foods';
 type SyncAction='upsert'|'update'|'delete';
@@ -20,6 +21,8 @@ const localOwnerKey='organizapp-local-owner';
 const legacyLocalKey='organizapp';
 const anonymousLocalKey='organizapp-anonymous';
 const userLocalKey=(userId:string)=>`organizapp-user-${userId}`;
+const householdPlacesKey=(userId:string,householdId:string)=>`organizapp-user-${userId}-household-${householdId}`;
+const activeHouseholdKey=(userId:string)=>`organizapp-active-household-${userId}`;
 const pendingSyncKey='organizapp-pending-sync';
 const uid=()=>crypto.randomUUID();
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
@@ -81,6 +84,49 @@ function readLocalPlaces(userId?:string|null){
 
 function readAnonymousPlaces(){
   return readLocalPlaces(null);
+}
+
+function readHouseholdPlaces(userId:string,householdId:string,isPersonal:boolean){
+  const scoped=readStoredPlaces(householdPlacesKey(userId,householdId));
+  if(scoped)return scoped;
+  if(isPersonal){
+    const legacy=readStoredPlaces(userLocalKey(userId));
+    if(legacy)return legacy;
+    if(!getLocalOwner())return readAnonymousPlaces();
+    return initial;
+  }
+  return [];
+}
+
+function writeHouseholdPlaces(userId:string,householdId:string,places:Place[]){
+  try{localStorage.setItem(householdPlacesKey(userId,householdId),JSON.stringify(places))}
+  catch{}
+}
+
+function readActiveHousehold(userId:string){
+  try{return localStorage.getItem(activeHouseholdKey(userId))}catch{return null}
+}
+
+function writeActiveHousehold(userId:string,householdId:string){
+  try{localStorage.setItem(activeHouseholdKey(userId),householdId)}catch{}
+}
+
+async function fetchHouseholdContext(userId:string,preferredId?:string|null){
+  const{data:personalId,error:personalError}=await supabase.rpc('ensure_personal_household');
+  if(personalError||!personalId)throw personalError||new Error('Não foi possível preparar sua casa.');
+  const{data,error}=await supabase.from('households')
+    .select('id,name,created_by,is_personal,household_members!inner(user_id,role)')
+    .eq('household_members.user_id',userId)
+    .order('created_at');
+  if(error)throw error;
+  const list:Household[]=(data||[]).map((h:any)=>{
+    const membership=(h.household_members||[]).find((m:any)=>m.user_id===userId);
+    return{id:h.id,name:h.name,created_by:h.created_by,is_personal:!!h.is_personal,role:membership?.role||'member'};
+  });
+  const requested=preferredId||readActiveHousehold(userId);
+  const chosen=list.some(h=>h.id===requested)?requested:(list.some(h=>h.id===personalId)?personalId:list[0]?.id);
+  if(!chosen)throw new Error('Nenhuma casa disponível para esta conta.');
+  return{households:list,personalId:personalId as string,householdId:chosen,household:list.find(h=>h.id===chosen)!};
 }
 
 function writeLocalPlaces(userId:string|null,places:Place[]){
@@ -237,6 +283,13 @@ function App(){
   const[user,setUser]=useState<any>(null);
   const[synced,setSynced]=useState(false);
   const[cacheReady,setCacheReady]=useState(true);
+  const[households,setHouseholds]=useState<Household[]>([]);
+  const[householdId,setHouseholdId]=useState<string|null>(null);
+  const[householdModal,setHouseholdModal]=useState(false);
+  const[householdBusy,setHouseholdBusy]=useState(false);
+  const[householdJoinCode,setHouseholdJoinCode]=useState('');
+  const[householdInvite,setHouseholdInvite]=useState<{code:string;expiresAt:string}|null>(null);
+  const[householdCopied,setHouseholdCopied]=useState(false);
   const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
