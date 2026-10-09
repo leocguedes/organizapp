@@ -235,7 +235,7 @@ async function uploadLocal(userId:string,places:Place[],householdId?:string){
       const{error:subError}=await supabase.from('subdivisions').upsert({id:s.id,user_id:userId,location_id:p.id,name:s.name});
       if(subError)throw subError;
       for(const f of s.foods){
-        const{error:foodError}=await supabase.from('foods').upsert({id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit});
+        const{error:foodError}=await supabase.from('foods').upsert({id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit,expires_on:f.expires_on||null});
         if(foodError)throw foodError;
       }
     }
@@ -427,7 +427,7 @@ function App(){
         return;
       }
       const{data,error}=await supabase.from('locations')
-        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit,expires_on))')
         .eq('household_id',context.householdId)
         .order('created_at');
       if(!active||request!==authRequest.current)return;
@@ -559,7 +559,7 @@ function App(){
     if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
     if(!pendingOk){setSynced(false);return}
     const{data,error}=await supabase.from('locations')
-      .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+      .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit,expires_on))')
       .eq('household_id',householdIdToLoad)
       .order('created_at');
     if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
@@ -669,7 +669,7 @@ function App(){
         return;
       }
       const{data,error}=await supabase.from('locations')
-        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit,expires_on))')
         .eq('household_id',context.householdId)
         .order('created_at');
       if(request!==authRequest.current)return;
@@ -957,7 +957,7 @@ function App(){
     setFoodMenu(null);
     offerUndo('Alimento removido',()=>{
       setPlaces(ps=>ps.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:s.foods.some(f=>f.id===removed.id)?s.foods:[...s.foods,removed]})}));
-      if(userId)void writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:removed.id,data:{id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit}}).then(ok=>{if(!ok)syncError('O alimento foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.')});
+      if(userId)void writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:removed.id,data:{id:removed.id,user_id:userId,subdivision_id:subId,name:removed.name,quantity:removed.quantity,unit:removed.unit,expires_on:removed.expires_on||null}}).then(ok=>{if(!ok)syncError('O alimento foi restaurado neste dispositivo e será sincronizado quando a conexão voltar.')});
     });
   }
 
@@ -1224,6 +1224,7 @@ function App(){
                         <div className="food-name">
                           <strong>{f.name}</strong>
                           <span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span>
+                          {f.expires_on&&<small className={'expiry-label '+(daysUntilExpiry(f.expires_on)<0?'expired':daysUntilExpiry(f.expires_on)<=3?'urgent':'')}>{expiryCaption(f.expires_on)}</small>}
                         </div>
                         <div className="qty">
                           <button disabled={f.quantity===0} onClick={()=>changeQty(selected,selectedSub,f.id,-1)} aria-label={'Diminuir '+f.name}>
@@ -1575,11 +1576,12 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
   const[name,setName]=useState(data?.name||'');
   const[quantity,setQuantity]=useState(data?.quantity ?? 1);
   const[unit,setUnit]=useState<Unit>(data?.unit||'unidades');
+  const[expiresOn,setExpiresOn]=useState(data?.expires_on||'');
   const[chosenPlace,setChosenPlace]=useState(placeId);
   const[chosenSub,setChosenSub]=useState(subId);
   const currentPlace=places.find(p=>p.id===chosenPlace);
   const existingFoods=currentPlace?.subdivisions.find(s=>s.id===chosenSub)?.foods||[];
-  const duplicateFood=existingFoods.find(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim()));
+  const duplicateFood=existingFoods.find(f=>f.id!==data?.id&&searchKey(f.name.trim())===searchKey(name.trim())&&f.unit===unit&&(f.expires_on||'')===expiresOn);
   const duplicate=!!duplicateFood;
   const quantityStep=unit==='kg'||unit==='L'?0.1:1;
   const canSave=!!name.trim()&&!!chosenPlace&&!!chosenSub&&Number.isFinite(quantity)&&quantity>=0;
@@ -1594,12 +1596,13 @@ function FoodModal({data,placeId,subId,places,recentFoods,onClose,onSave,onAddTo
     </div>}
     <label>Nome do alimento<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Arroz"/></label>
     {!data&&recentFoods.length>0&&!name&&<div className="recent-foods"><span>Adicionados recentemente</span><div>{recentFoods.slice(0,6).map(f=><button key={f.name} onClick={()=>{setName(f.name);setUnit(f.unit)}}>{f.name}</button>)}</div></div>}
-    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {formatQuantity(quantity,unit)}</button>}{duplicateFood&&duplicateFood.unit!==unit&&<small>As unidades são diferentes ({duplicateFood.unit} e {unit}), então mantenha como itens separados.</small>}</div>}
+    {duplicate&&<div className="duplicate-note"><strong>“{duplicateFood?.name}” já está nesta divisão.</strong><span>Você pode somar a nova quantidade ao estoque existente.</span>{canMerge&&<button type="button" onClick={()=>onAddToExisting(chosenPlace,chosenSub,duplicateFood!.id,quantity,unit)}><Plus size={15}/> Somar {formatQuantity(quantity,unit)}</button>}</div>}
+    <label>Validade (opcional)<input type="date" value={expiresOn} onChange={e=>setExpiresOn(e.target.value)} aria-label="Data de validade do alimento"/><small className="field-help">Se houver várias embalagens com datas diferentes, cadastre cada lote separadamente.</small></label>
     <div className="row">
       <label>Quantidade<div className="number"><button type="button" aria-label="Diminuir quantidade" onClick={()=>setQuantity(Math.max(0,Number((quantity-quantityStep).toFixed(3))))}><Minus/></button><input type="number" min="0" step={quantityStep} value={quantity} onChange={e=>{const value=Number(e.target.value);setQuantity(Number.isFinite(value)?Math.max(0,value):0)}} aria-label="Quantidade" /><button type="button" aria-label="Aumentar quantidade" onClick={()=>setQuantity(Number((quantity+quantityStep).toFixed(3)))}><Plus/></button></div></label>
       <label>Unidade<select value={unit} onChange={e=>setUnit(e.target.value as Unit)}>{units.map(u=><option key={u}>{u}</option>)}</select></label>
     </div>
-    <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,chosenSub,{name:name.trim(),quantity,unit})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
+    <button className="primary full" disabled={!canSave} onClick={()=>onSave(chosenPlace,chosenSub,{name:name.trim(),quantity,unit,expires_on:expiresOn||null})}>{data?'Salvar alterações':'Adicionar alimento'}</button>
   </Modal>
 }
 
