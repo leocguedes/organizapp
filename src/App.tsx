@@ -267,9 +267,16 @@ function App(){
       const accountCache=readStoredPlaces(userLocalKey(current.id));
       if(cloudPlaces.length===0&&accountCache?.length){
         setPlaces(accountCache);
+        try{
+          await uploadLocal(current.id,accountCache);
+          if(!active||request!==authRequest.current)return;
+          setSynced(true);
+        }catch{
+          if(!active||request!==authRequest.current)return;
+          setSynced(false);
+          setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
+        }
         setCacheReady(true);
-        setSynced(false);
-        setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
         return;
       }
       if(cloudPlaces.length===0&&anonymousLocal.length&&!getLocalOwner()){
