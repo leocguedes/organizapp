@@ -463,13 +463,17 @@ function App(){
   },[authMessage]);
 
   async function refreshCloud(userIdToLoad=userId){
-    if(!userIdToLoad||userIdToLoad!==userId)return;
+    const householdIdToLoad=householdId;
+    if(!userIdToLoad||userIdToLoad!==userId||!householdIdToLoad)return;
     const request=authRequest.current;
     const pendingOk=await flushPendingSync(userIdToLoad);
-    if(request!==authRequest.current||userIdToLoad!==userId)return;
+    if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
     if(!pendingOk){setSynced(false);return}
-    const{data,error}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
-    if(request!==authRequest.current||userIdToLoad!==userId)return;
+    const{data,error}=await supabase.from('locations')
+      .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+      .eq('household_id',householdIdToLoad)
+      .order('created_at');
+    if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
     if(error){
       setSynced(false);
       return;
@@ -477,30 +481,29 @@ function App(){
     const cloudPlaces=mapCloudPlaces(data||[]);
     if(cloudPlaces.length){
       setPlaces(cloudPlaces);
-      writeLocalPlaces(userIdToLoad,cloudPlaces);
+      writeHouseholdPlaces(userIdToLoad,householdIdToLoad,cloudPlaces);
       clearLegacyCachesIfMatching(userIdToLoad,cloudPlaces);
       setSynced(true);
       return;
     }
 
-    const accountCache=readStoredPlaces(userLocalKey(userIdToLoad));
-    const legacyAccountCache=getLocalOwner()===userIdToLoad?readStoredPlaces(legacyLocalKey):null;
-    const recoveryCache=accountCache?.length?accountCache:legacyAccountCache?.length?legacyAccountCache:places;
+    const activeHousehold=households.find(h=>h.id===householdIdToLoad);
+    const recoveryCache=readHouseholdPlaces(userIdToLoad,householdIdToLoad,!!activeHousehold?.is_personal);
     if(!recoveryCache.length){
       setPlaces([]);
-      writeLocalPlaces(userIdToLoad,[]);
+      writeHouseholdPlaces(userIdToLoad,householdIdToLoad,[]);
       setSynced(true);
       return;
     }
     setPlaces(recoveryCache);
-    writeLocalPlaces(userIdToLoad,recoveryCache);
+    writeHouseholdPlaces(userIdToLoad,householdIdToLoad,recoveryCache);
     try{
-      await uploadLocal(userIdToLoad,recoveryCache);
-      if(request!==authRequest.current||userIdToLoad!==userId)return;
+      await uploadLocal(userIdToLoad,recoveryCache,householdIdToLoad);
+      if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
       clearLegacyCachesIfMatching(userIdToLoad,recoveryCache);
       setSynced(true);
     }catch{
-      if(request!==authRequest.current||userIdToLoad!==userId)return;
+      if(request!==authRequest.current||userIdToLoad!==userId||householdIdToLoad!==householdId)return;
       setSynced(false);
       setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
     }
@@ -517,7 +520,7 @@ function App(){
       window.removeEventListener('focus',refresh);
       window.removeEventListener('online',refresh);
     };
-  },[userId]);
+  },[userId,householdId]);
 
   function rememberFood(name:string,unit:Unit){
     setRecentFoods(prev=>{
