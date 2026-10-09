@@ -677,3 +677,10 @@ button{touch-action:manipulation}
 .location-icon,.place-icon{width:auto;height:auto;min-width:0;min-height:0;border-radius:0;background:transparent;color:inherit;display:flex;align-items:center;justify-content:center;line-height:1;flex:0 0 auto}
 .location-icon{font-size:34px}
 .place-icon{font-size:28px}
+
+.recipe-online-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 16px}
+.recipe-online-controls>span,.recipe-online-message{font-size:11px;color:#7f8b81;line-height:1.5}
+.recipe-online-message{margin:0 0 14px;padding:10px 12px;border:1px solid #e0e8dd;border-radius:10px;background:#fffdf9}
+.recipe-source{margin:-4px 0 12px;font-size:11px}
+.recipe-source a{display:inline-flex;align-items:center;gap:5px;color:#55745c;text-decoration:none;font-weight:600}
+.recipe-source a:hover{text-decoration:underline}
