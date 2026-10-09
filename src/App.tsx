@@ -264,6 +264,14 @@ function App(){
         return;
       }
       const cloudPlaces=mapCloudPlaces(data||[]);
+      const accountCache=readStoredPlaces(userLocalKey(current.id));
+      if(cloudPlaces.length===0&&accountCache?.length){
+        setPlaces(accountCache);
+        setCacheReady(true);
+        setSynced(false);
+        setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
+        return;
+      }
       if(cloudPlaces.length===0&&anonymousLocal.length&&!getLocalOwner()){
         try{
           await uploadLocal(current.id,anonymousLocal);
