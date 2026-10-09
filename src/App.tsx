@@ -554,6 +554,109 @@ function App(){
     setAuthMessage(message+' O dado local foi preservado.');
   }
 
+  async function activateHousehold(targetHouseholdId?:string|null,targetUserId=userId,showMessage=false){
+    if(!targetUserId)return;
+    const request=++authRequest.current;
+    setCacheReady(false);
+    setHouseholdBusy(true);
+    clearTransientUi();
+    try{
+      const context=await fetchHouseholdContext(targetUserId,targetHouseholdId);
+      if(request!==authRequest.current)return;
+      setHouseholds(context.households);
+      setHouseholdId(context.householdId);
+      writeActiveHousehold(targetUserId,context.householdId);
+      const fallback=readHouseholdPlaces(targetUserId,context.householdId,context.household.is_personal);
+      setPlaces(fallback);
+      const pendingOk=await flushPendingSync(targetUserId);
+      if(request!==authRequest.current)return;
+      if(!pendingOk){
+        setSynced(false);
+        setAuthMessage('Há alterações aguardando sincronização. Os dados locais desta casa foram preservados.');
+        setCacheReady(true);
+        return;
+      }
+      const{data,error}=await supabase.from('locations')
+        .select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))')
+        .eq('household_id',context.householdId)
+        .order('created_at');
+      if(request!==authRequest.current)return;
+      if(error){
+        setSynced(false);
+        setAuthMessage('Não foi possível sincronizar esta casa agora. Os dados locais foram preservados.');
+        setCacheReady(true);
+        return;
+      }
+      const cloudPlaces=mapCloudPlaces(data||[]);
+      if(cloudPlaces.length){
+        setPlaces(cloudPlaces);
+        writeHouseholdPlaces(targetUserId,context.householdId,cloudPlaces);
+        clearLegacyCachesIfMatching(targetUserId,cloudPlaces);
+        setSynced(true);
+      }else if(fallback.length){
+        setPlaces(fallback);
+        writeHouseholdPlaces(targetUserId,context.householdId,fallback);
+        try{
+          await uploadLocal(targetUserId,fallback,context.householdId);
+          if(request!==authRequest.current)return;
+          clearLegacyCachesIfMatching(targetUserId,fallback);
+          setSynced(true);
+          if(showMessage)setAuthMessage('Casa carregada e estoque sincronizado.');
+        }catch{
+          if(request!==authRequest.current)return;
+          setSynced(false);
+          setAuthMessage('Os dados locais desta casa foram preservados, mas ainda não foi possível sincronizá-los.');
+        }
+      }else{
+        setPlaces([]);
+        writeHouseholdPlaces(targetUserId,context.householdId,[]);
+        setSynced(true);
+      }
+      setCacheReady(true);
+    }catch{
+      if(request!==authRequest.current)return;
+      setSynced(false);
+      setAuthMessage('Não foi possível abrir esta casa. Os dados locais foram preservados.');
+      setCacheReady(true);
+    }finally{
+      if(request===authRequest.current)setHouseholdBusy(false);
+    }
+  }
+
+  async function createHouseholdInvite(){
+    if(!userId||!householdId)return;
+    setHouseholdBusy(true);
+    setHouseholdInvite(null);
+    setHouseholdCopied(false);
+    try{
+      const{data,error}=await supabase.rpc('create_household_invite',{
+        target_household_id:householdId,valid_for_days:7,allowed_uses:10
+      });
+      if(error)throw error;
+      const invite=Array.isArray(data)?data[0]:data;
+      if(!invite?.invite_code)throw new Error('O convite não foi retornado.');
+      setHouseholdInvite({code:invite.invite_code,expiresAt:invite.invite_expires_at});
+      setAuthMessage(null);
+    }catch{
+      setAuthMessage('Não foi possível gerar o convite. Apenas administradores da casa podem convidar membros.');
+    }finally{setHouseholdBusy(false)}
+  }
+
+  async function joinHousehold(){
+    if(!userId||!householdJoinCode.trim())return;
+    setHouseholdBusy(true);
+    try{
+      const{data,error}=await supabase.rpc('join_household_by_code',{invite_code:householdJoinCode.trim()});
+      if(error)throw error;
+      setHouseholdJoinCode('');
+      setHouseholdInvite(null);
+      await activateHousehold(String(data),userId,true);
+      setHouseholdModal(false);
+    }catch{
+      setAuthMessage('Esse convite é inválido, expirou ou atingiu o limite de usos.');
+    }finally{setHouseholdBusy(false)}
+  }
+
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
