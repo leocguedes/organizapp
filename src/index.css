@@ -356,3 +356,43 @@ header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur
   .shopping-check{margin-top:2px}
   .shopping-row-actions{flex-direction:column;align-items:flex-end}
 }
+
+
+/* Expiration and consumption planning */
+.field-help{display:block;margin-top:-3px;color:#8a968e;font-size:10px;font-weight:400;line-height:1.45}
+.expiry-label{display:inline-flex;align-items:center;width:max-content;max-width:100%;font-size:10px;color:#73816f;background:#eef4e9;border-radius:6px;padding:3px 6px;font-weight:600}
+.expiry-label.urgent{background:#fbf0dd;color:#94703a}
+.expiry-label.expired{background:#fae9e7;color:#a8514c}
+.consumption-panel,.expiry-panel{margin:0 0 25px;padding:17px;background:#fffdf9;border:1px solid #e1e8de;border-radius:17px}
+.smart-panel-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
+.smart-panel-heading h3{margin:0 0 4px;color:#405146;font-size:16px}
+.smart-panel-heading p:not(.eyebrow){margin:0;color:#89958d;font-size:11px;line-height:1.45}
+.smart-panel-heading .eyebrow{margin-bottom:4px;font-size:9px}
+.smart-panel-heading>span{min-width:27px;height:27px;padding:0 7px;display:grid;place-items:center;border-radius:9px;background:#edf4eb;color:#58745e;font-weight:700;font-size:11px}
+.smart-suggestion-list{display:flex;flex-direction:column;gap:9px}
+.smart-suggestion{padding:13px;border:1px solid #e5ebe2;border-radius:12px;background:#fbfcf9}
+.smart-suggestion-copy{display:flex;flex-direction:column;gap:4px}
+.smart-suggestion-copy>strong{font-size:13px;color:#405146}
+.smart-suggestion-copy>small{font-size:10px;color:#89958d}
+.smart-suggestion-copy>p{font-size:11px;color:#69796e;line-height:1.5;margin:2px 0 7px}
+.smart-suggestion-actions{display:flex;flex-wrap:wrap;gap:7px}
+.smart-suggestion-actions .primary{font-size:11px;padding:9px 11px}
+.secondary-action,.tertiary-action{border:1px solid #dce5d9;background:#fffdf9;color:#607367;border-radius:9px;padding:8px 10px;font:600 10px 'DM Sans',sans-serif;cursor:pointer}
+.secondary-action:hover,.tertiary-action:hover{background:#f0f5ed}
+.expiry-items{display:flex;flex-direction:column;gap:7px}
+.expiry-item{display:flex;align-items:center;gap:9px;min-width:0;padding:10px 11px;background:#fbfcf9;border:1px solid #e6ece3;border-radius:11px}
+.expiry-item-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.expiry-item-copy strong{font-size:12px;color:#46584c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expiry-item-copy small{font-size:10px;color:#89958d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.expiry-item .tertiary-action{padding:6px 9px}
+.food-name .expiry-label{margin-top:3px}
+@media(max-width:600px){
+  .consumption-panel,.expiry-panel{padding:13px;margin-bottom:20px}
+  .smart-suggestion{padding:11px}
+  .smart-suggestion-actions{display:grid;grid-template-columns:1fr 1fr}
+  .smart-suggestion-actions .primary{grid-column:1/-1}
+  .expiry-item{align-items:flex-start;flex-wrap:wrap}
+  .expiry-item-copy{flex-basis:calc(100% - 10px)}
+  .expiry-item .expiry-label{margin-left:31px}
+  .expiry-item .tertiary-action{margin-left:auto}
+}
