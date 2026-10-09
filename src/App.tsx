@@ -2,17 +2,18 @@ import{useEffect,useMemo,useRef,useState}from'react';
 import type{ReactNode}from'react';
 import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
-import{Apple,Box,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{Apple,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
-type Food={id:string;name:string;quantity:number;unit:Unit};
+type Food={id:string;name:string;quantity:number;unit:Unit;expires_on?:string|null};
+type ConsumptionRule={id:string;household_id:string;food_id:string;amount:number;period_days:number;next_suggestion_on:string;low_stock_threshold:number|null;restock_quantity:number|null;is_active:boolean;created_by:string;last_confirmed_at:string|null};
 type Sub={id:string;name:string;foods:Food[]};
 type Place={id:string;name:string;subdivisions:Sub[]};
 type Household={id:string;name:string;created_by:string;is_personal:boolean;role:'owner'|'admin'|'member'};
 type ShoppingItem={id:string;household_id:string;name:string;quantity:number;unit:string;category?:string|null;is_purchased:boolean;source:string;linked_food_id?:string|null;notes?:string|null;created_by:string;purchased_by?:string|null;purchased_at?:string|null;created_at?:string};
 type UndoState={label:string;action:()=>void};
-type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items';
+type SyncTable='locations'|'subdivisions'|'foods'|'shopping_items'|'food_consumption_rules'|'food_consumption_events';
 type SyncAction='upsert'|'update'|'delete';
 type PendingOperation={id:string;userId:string;table:SyncTable;action:SyncAction;rowId?:string;data?:Record<string,unknown>};
 
@@ -27,6 +28,32 @@ const activeHouseholdKey=(userId:string)=>`organizapp-active-household-${userId}
 const householdShoppingKey=(userId:string,householdId:string)=>`organizapp-shopping-${userId}-${householdId}`;
 const pendingSyncKey='organizapp-pending-sync';
 const uid=()=>crypto.randomUUID();
+function localDateString(date=new Date()){
+  const year=date.getFullYear();
+  const month=String(date.getMonth()+1).padStart(2,'0');
+  const day=String(date.getDate()).padStart(2,'0');
+  return year+'-'+month+'-'+day;
+}
+function addIsoDays(dateText:string,days:number){
+  const parts=dateText.split('-').map(Number);
+  const date=new Date(parts[0],parts[1]-1,parts[2],12);
+  date.setDate(date.getDate()+days);
+  return localDateString(date);
+}
+function daysUntilExpiry(dateText:string){
+  const parts=dateText.split('-').map(Number);
+  const expiry=new Date(parts[0],parts[1]-1,parts[2]);
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.round((expiry.getTime()-today.getTime())/86400000);
+}
+function expiryCaption(dateText:string){
+  const days=daysUntilExpiry(dateText);
+  if(days<0)return 'Vencido há '+Math.abs(days)+' '+(Math.abs(days)===1?'dia':'dias');
+  if(days===0)return 'Vence hoje';
+  if(days===1)return 'Vence amanhã';
+  return 'Vence em '+days+' dias';
+}
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
 const initial:Place[]=[
@@ -49,7 +76,8 @@ function normalize(raw:any):Place[]{
         id:isUUID(f.id)?f.id:uid(),
         name:String(f.name??'').trim(),
         quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
-        unit:units.includes(f.unit)?f.unit:'unidades'
+        unit:units.includes(f.unit)?f.unit:'unidades',
+        expires_on:typeof f.expires_on==='string'?f.expires_on:null
       }))
     }))
   })).filter((p:Place)=>p.name||p.subdivisions.length);
@@ -294,7 +322,8 @@ function mapCloudPlaces(data:any[]):Place[]{
         id:isUUID(f.id)?f.id:uid(),
         name:String(f.name??'').trim(),
         quantity:Math.max(0,Number.isFinite(Number(f.quantity))?Number(f.quantity):0),
-        unit:units.includes(f.unit)?f.unit:'unidades'
+        unit:units.includes(f.unit)?f.unit:'unidades',
+        expires_on:typeof f.expires_on==='string'?f.expires_on:null
       }))
     }))
   }));
@@ -887,12 +916,12 @@ function App(){
     if(!cleanName||!places.some(p=>p.id===placeId&&p.subdivisions.some(s=>s.id===subId)))return null;
     const safeQuantity=Math.max(0,Number.isFinite(data.quantity)?Number(data.quantity):0);
     const safeUnit=units.includes(data.unit)?data.unit:'unidades';
-    const food={name:cleanName,quantity:safeQuantity,unit:safeUnit,id:id||uid()};
+    const food={name:cleanName,quantity:safeQuantity,unit:safeUnit,expires_on:data.expires_on||null,id:id||uid()};
     const snapshot=places;
     const next=places.map(p=>p.id!==placeId?p:{...p,subdivisions:p.subdivisions.map(s=>s.id!==subId?s:{...s,foods:id?s.foods.map(f=>f.id===id?food:f):[...s.foods,food]})});
     setPlaces(next);
     if(userId){
-      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:food.id,data:{id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit}});
+      const ok=await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:food.id,data:{id:food.id,user_id:userId,subdivision_id:subId,name:food.name,quantity:food.quantity,unit:food.unit,expires_on:food.expires_on}});
       if(!ok)syncError('Alimento salvo neste dispositivo. Ele será sincronizado quando a conexão voltar.');
     }
     rememberFood(food.name,food.unit);
@@ -1033,7 +1062,7 @@ function App(){
             for(const s of p.subdivisions){
               const subOk=await writeOrQueue(userId,{userId,table:'subdivisions',action:'upsert',rowId:s.id,data:{id:s.id,user_id:userId,location_id:p.id,name:s.name}});
               if(!subOk)return;
-              for(const f of s.foods)await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:f.id,data:{id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit}});
+              for(const f of s.foods)await writeOrQueue(userId,{userId,table:'foods',action:'upsert',rowId:f.id,data:{id:f.id,user_id:userId,subdivision_id:s.id,name:f.name,quantity:f.quantity,unit:f.unit,expires_on:f.expires_on||null}});
             }
           });
         }
