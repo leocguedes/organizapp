@@ -437,6 +437,7 @@ function App(){
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
+    const previousOwner=getLocalOwner();
     const local=readAnonymousPlaces();
     try{
       if(mode==='signup'){
@@ -464,26 +465,52 @@ function App(){
       }else{
         const{data,error}=await supabase.auth.signInWithPassword({email,password});
         if(error){setAuthMessage(error.message);return}
+        let accountFallback=local;
         if(data.user){
+          const accountCache=readStoredPlaces(userLocalKey(data.user.id));
+          const legacyAccountCache=previousOwner===data.user.id?readStoredPlaces(legacyLocalKey):null;
+          accountFallback=accountCache?.length?accountCache:legacyAccountCache?.length?legacyAccountCache:!previousOwner?local:readLocalPlaces(data.user.id);
           setCacheReady(false);
           setLocalOwner(data.user.id);
-          setPlaces(readLocalPlaces(data.user.id));
+          setPlaces(accountFallback);
+          setRecentFoods(readRecentFoods(data.user.id));
         }
         const request=++authRequest.current;
         const{data:cloudData, error:cloudError}=await supabase.from('locations').select('id,name,subdivisions(id,name,foods(id,name,quantity,unit))').order('created_at');
         if(request===authRequest.current){
           if(cloudError){
             setSynced(false);
-            if(data.user)setPlaces(readLocalPlaces(data.user.id));
+            if(data.user)setPlaces(accountFallback);
             setCacheReady(true);
             setAuthMessage('Login realizado, mas não foi possível sincronizar agora. Seus dados locais continuam disponíveis.');
           }else{
             const cloudPlaces=mapCloudPlaces(cloudData||[]);
-            setPlaces(cloudPlaces);
-            if(data.user)writeLocalPlaces(data.user.id,cloudPlaces);
-            setSynced(true);
-            setCacheReady(true);
-            setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+            if(cloudPlaces.length){
+              setPlaces(cloudPlaces);
+              if(data.user)writeLocalPlaces(data.user.id,cloudPlaces);
+              setSynced(true);
+              setCacheReady(true);
+              setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+            }else if(data.user){
+              setPlaces(accountFallback);
+              writeLocalPlaces(data.user.id,accountFallback);
+              try{
+                await uploadLocal(data.user.id,accountFallback);
+                if(request!==authRequest.current)return;
+                setSynced(true);
+                setAuthMessage('Login realizado. Seus dados locais foram recuperados e sincronizados.');
+              }catch{
+                if(request!==authRequest.current)return;
+                setSynced(false);
+                setAuthMessage('Login realizado. Seus dados locais foram preservados, mas a sincronização ainda não foi concluída.');
+              }
+              setCacheReady(true);
+            }else{
+              setPlaces(cloudPlaces);
+              setSynced(true);
+              setCacheReady(true);
+              setAuthMessage('Login realizado. Seus dados estão sincronizados.');
+            }
           }
         }
         setAuthModal(false);
