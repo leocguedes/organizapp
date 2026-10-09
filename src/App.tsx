@@ -101,14 +101,18 @@ function placesCacheSignature(places:Place[]){
 function clearLegacyCachesIfMatching(userId:string,places:Place[]){
   const signature=placesCacheSignature(places);
   try{
+    const owner=getLocalOwner();
     const anonymous=readStoredPlaces(anonymousLocalKey);
-    const legacy=getLocalOwner()===userId?readStoredPlaces(legacyLocalKey):null;
+    const legacy=!owner||owner===userId?readStoredPlaces(legacyLocalKey):null;
     const anonymousSignature=anonymous?placesCacheSignature(anonymous):null;
     const legacySignature=legacy?placesCacheSignature(legacy):null;
     if(anonymous&&(anonymousSignature===signature||(legacySignature&&anonymousSignature===legacySignature))){
       localStorage.removeItem(anonymousLocalKey);
     }
-    if(legacy&&legacySignature===signature)localStorage.removeItem(legacyLocalKey);
+    if(legacy&&legacySignature===signature&&(!owner||owner===userId)){
+      localStorage.removeItem(legacyLocalKey);
+    }
+    setLocalOwner(userId);
   }catch{}
 }
 
