@@ -384,9 +384,33 @@ function App(){
       return;
     }
     const cloudPlaces=mapCloudPlaces(data||[]);
-    setPlaces(cloudPlaces);
-    writeLocalPlaces(userIdToLoad,cloudPlaces);
-    setSynced(true);
+    if(cloudPlaces.length){
+      setPlaces(cloudPlaces);
+      writeLocalPlaces(userIdToLoad,cloudPlaces);
+      setSynced(true);
+      return;
+    }
+
+    const accountCache=readStoredPlaces(userLocalKey(userIdToLoad));
+    const legacyAccountCache=getLocalOwner()===userIdToLoad?readStoredPlaces(legacyLocalKey):null;
+    const recoveryCache=accountCache?.length?accountCache:legacyAccountCache?.length?legacyAccountCache:places;
+    if(!recoveryCache.length){
+      setPlaces([]);
+      writeLocalPlaces(userIdToLoad,[]);
+      setSynced(true);
+      return;
+    }
+    setPlaces(recoveryCache);
+    writeLocalPlaces(userIdToLoad,recoveryCache);
+    try{
+      await uploadLocal(userIdToLoad,recoveryCache);
+      if(request!==authRequest.current||userIdToLoad!==userId)return;
+      setSynced(true);
+    }catch{
+      if(request!==authRequest.current||userIdToLoad!==userId)return;
+      setSynced(false);
+      setAuthMessage('Seus dados locais foram preservados enquanto a sincronização é recuperada.');
+    }
   }
 
   useEffect(()=>{
