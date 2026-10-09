@@ -1708,9 +1708,10 @@ function ShoppingRow({item,onToggle,onDelete,onStock}:{item:ShoppingItem;onToggl
   </div>
 }
 
-function ShoppingStockModal({item,places,onClose,onConfirm}:{item:ShoppingItem;places:Place[];onConfirm:(item:ShoppingItem,placeId:string,subId:string)=>void;onClose:()=>void}){
+function ShoppingStockModal({item,places,onClose,onConfirm}:{item:ShoppingItem;places:Place[];onConfirm:(item:ShoppingItem,placeId:string,subId:string,expiresOn:string|null)=>void;onClose:()=>void}){
   const[placeId,setPlaceId]=useState(places[0]?.id||'');
   const[subId,setSubId]=useState(places[0]?.subdivisions[0]?.id||'');
+  const[expiresOn,setExpiresOn]=useState('');
   const place=places.find(p=>p.id===placeId);
   const availableSub=place?.subdivisions.find(s=>s.id===subId);
   const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
@@ -1720,8 +1721,9 @@ function ShoppingStockModal({item,places,onClose,onConfirm}:{item:ShoppingItem;p
       <p className="modal-help">Escolha onde guardar o que você comprou.</p>
       <label>Local<select value={placeId} onChange={e=>{const next=e.target.value;setPlaceId(next);setSubId(places.find(p=>p.id===next)?.subdivisions[0]?.id||'')}}>{places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       <label>Divisão<select value={subId} disabled={!place} onChange={e=>setSubId(e.target.value)}>{place?.subdivisions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      {availableSub?.foods.some(f=>searchKey(f.name)===searchKey(item.name)&&f.unit===unit)&&<p className="modal-help">Esse alimento já existe nesta divisão. A quantidade será somada ao estoque atual.</p>}
-      <button className="primary full" disabled={!place||!availableSub} onClick={()=>onConfirm(item,placeId,subId)}>Adicionar {formatQuantity(item.quantity,unit)}</button>
+      <label>Validade (opcional)<input type="date" value={expiresOn} onChange={e=>setExpiresOn(e.target.value)}/></label>
+      {availableSub?.foods.some(f=>searchKey(f.name)===searchKey(item.name)&&f.unit===unit&&(f.expires_on||'')===expiresOn)&&<p className="modal-help">Esse alimento já existe nesta divisão com a mesma validade. A quantidade será somada ao estoque atual.</p>}
+      <button className="primary full" disabled={!place||!availableSub} onClick={()=>onConfirm(item,placeId,subId,expiresOn||null)}>Adicionar {formatQuantity(item.quantity,unit)}</button>
     </>:<>
       <p className="modal-help">Crie um local e uma divisão antes de adicionar esta compra ao estoque.</p>
       <button className="primary full" onClick={onClose}>Fechar</button>
