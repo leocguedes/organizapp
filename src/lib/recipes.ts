@@ -5,6 +5,7 @@ export type RecipeIngredient = {
   aliases: string[];
   quantity: number;
   unit: Unit;
+  measureText?: string;
 };
 
 export type Recipe = {
@@ -15,6 +16,10 @@ export type Recipe = {
   servings: number;
   ingredients: RecipeIngredient[];
   instructions: string[];
+  source?: 'themealdb';
+  sourceUrl?: string;
+  imageUrl?: string;
+  presenceOnly?: boolean;
 };
 
 export type RecipePantryItem = {
@@ -57,6 +62,9 @@ export function getRecipeIngredientStatuses(recipe:Recipe,pantry:RecipePantryIte
     const allMatches=pantry.filter(item=>matchesRecipeIngredient(ingredient,item.name));
     const expiredMatches=allMatches.filter(item=>!!item.expires_on&&item.expires_on<today);
     const matches=allMatches.filter(item=>!item.expires_on||item.expires_on>=today);
+    if(recipe.presenceOnly){
+      return{ingredient,matches,expiredMatches,availableQuantity:matches.length?1:0,comparable:false,enough:matches.length>0,missingQuantity:matches.length?0:1};
+    }
     let availableQuantity=0;
     let comparable=false;
     for(const item of matches){
