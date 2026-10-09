@@ -471,6 +471,36 @@ function App(){
   },[]);
 
   useEffect(()=>{
+    if(!userId||!householdId){
+      setShoppingItems([]);
+      setShoppingLoading(false);
+      return;
+    }
+    let active=true;
+    const accountId=userId;
+    const activeHouse=householdId;
+    setShoppingItems(readShoppingCache(accountId,activeHouse));
+    setShoppingLoading(true);
+    supabase.from('shopping_items').select('*')
+      .eq('household_id',activeHouse)
+      .order('is_purchased',{ascending:true})
+      .order('created_at',{ascending:false})
+      .then(({data,error})=>{
+        if(!active)return;
+        if(error){
+          setAuthMessage('A lista de compras está disponível em cache, mas não foi possível sincronizá-la agora.');
+          setShoppingItems(readShoppingCache(accountId,activeHouse));
+          return;
+        }
+        const items=mapShoppingItems(data||[]);
+        setShoppingItems(items);
+        writeShoppingCache(accountId,activeHouse,items);
+      })
+      .finally(()=>{if(active)setShoppingLoading(false)});
+    return()=>{active=false};
+  },[userId,householdId]);
+
+  useEffect(()=>{
     if(!cacheReady)return;
     if(userId&&householdId)writeHouseholdPlaces(userId,householdId,places);
     else writeLocalPlaces(userId,places);
@@ -687,6 +717,82 @@ function App(){
     }finally{setHouseholdBusy(false)}
   }
 
+  function persistShopping(next:ShoppingItem[],targetHousehold=householdId,targetUser=userId){
+    setShoppingItems(next);
+    if(targetUser&&targetHousehold)writeShoppingCache(targetUser,targetHousehold,next);
+  }
+
+  async function addShoppingItem(name:string,quantity:number,unit:Unit){
+    const clean=name.trim();
+    if(!clean||!Number.isFinite(quantity)||quantity<=0)return;
+    if(!userId||!householdId){
+      setAuthMessage('Entre na sua conta para usar a lista de compras compartilhada.');
+      setAuthModal(true);
+      return;
+    }
+    const duplicate=shoppingItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
+    if(duplicate){
+      const nextQuantity=Number((duplicate.quantity+quantity).toFixed(3));
+      const next=shoppingItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity}:item);
+      persistShopping(next);
+      const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity}});
+      if(!ok)syncError('Quantidade atualizada na lista deste dispositivo; será sincronizada quando a conexão voltar.');
+      return;
+    }
+    const item:ShoppingItem={
+      id:uid(),household_id:householdId,name:clean,quantity,unit,
+      is_purchased:false,source:'manual',created_by:userId,created_at:new Date().toISOString()
+    };
+    persistShopping([item,...shoppingItems]);
+    const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'upsert',rowId:item.id,data:item as unknown as Record<string,unknown>});
+    if(!ok)syncError('Item adicionado à lista local; será sincronizado quando a conexão voltar.');
+  }
+
+  async function toggleShoppingItem(item:ShoppingItem){
+    if(!userId||!householdId||item.household_id!==householdId)return;
+    const isPurchased=!item.is_purchased;
+    const updated:ShoppingItem={
+      ...item,
+      is_purchased:isPurchased,
+      purchased_by:isPurchased?userId:null,
+      purchased_at:isPurchased?new Date().toISOString():null
+    };
+    persistShopping(shoppingItems.map(row=>row.id===item.id?updated:row));
+    const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:item.id,data:{
+      is_purchased:updated.is_purchased,purchased_by:updated.purchased_by,purchased_at:updated.purchased_at
+    }});
+    if(!ok)syncError('Estado atualizado localmente; será sincronizado quando a conexão voltar.');
+  }
+
+  async function deleteShoppingItem(item:ShoppingItem){
+    if(!userId||!householdId||item.household_id!==householdId)return;
+    persistShopping(shoppingItems.filter(row=>row.id!==item.id));
+    const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'delete',rowId:item.id});
+    if(!ok)syncError('Item removido localmente; a exclusão será sincronizada quando a conexão voltar.');
+  }
+
+  async function addPurchasedShoppingToStock(item:ShoppingItem,placeId:string,subId:string){
+    if(!userId||!householdId||!item.is_purchased)return;
+    const targetPlace=places.find(place=>place.id===placeId);
+    const targetSub=targetPlace?.subdivisions.find(subdivision=>subdivision.id===subId);
+    if(!targetPlace||!targetSub)return;
+    const unit=units.includes(item.unit as Unit)?item.unit as Unit:'unidades';
+    const existing=targetSub.foods.find(food=>searchKey(food.name)===searchKey(item.name)&&food.unit===unit);
+    let targetFoodId:string|null=null;
+    if(existing){
+      targetFoodId=existing.id;
+      await addToExistingFood(placeId,subId,existing.id,item.quantity,unit);
+    }else{
+      targetFoodId=await saveFood(placeId,subId,{name:item.name,quantity:item.quantity,unit});
+    }
+    if(!targetFoodId)return;
+    const updated=shoppingItems.map(row=>row.id===item.id?{...row,linked_food_id:targetFoodId}:row);
+    persistShopping(updated);
+    const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:item.id,data:{linked_food_id:targetFoodId}});
+    if(!ok)syncError('O alimento foi adicionado ao estoque. A lista será sincronizada quando a conexão voltar.');
+    setShoppingStockItem(null);
+  }
+
   async function handleEmailAuth(mode:'signin'|'signup',email:string,password:string){
     setAuthBusy(true);
     setAuthMessage(null);
@@ -773,9 +879,9 @@ function App(){
     });
   },[search,places]);
 
-  async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string){
+  async function saveFood(placeId:string,subId:string,data:Omit<Food,'id'>,id?:string):Promise<string|null>{
     const cleanName=data.name.trim();
-    if(!cleanName||!places.some(p=>p.id===placeId&&p.subdivisions.some(s=>s.id===subId)))return;
+    if(!cleanName||!places.some(p=>p.id===placeId&&p.subdivisions.some(s=>s.id===subId)))return null;
     const safeQuantity=Math.max(0,Number.isFinite(data.quantity)?Number(data.quantity):0);
     const safeUnit=units.includes(data.unit)?data.unit:'unidades';
     const food={name:cleanName,quantity:safeQuantity,unit:safeUnit,id:id||uid()};
@@ -788,6 +894,7 @@ function App(){
     }
     rememberFood(food.name,food.unit);
     setFoodModal(null);
+    return food.id;
   }
 
   async function addToExistingFood(placeId:string,subId:string,existingId:string,amount:number,unit:Unit){
