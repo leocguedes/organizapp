@@ -396,3 +396,60 @@ header{position:sticky;top:0;z-index:6;background:#fffdf9ee;backdrop-filter:blur
   .expiry-item .expiry-label{margin-left:31px}
   .expiry-item .tertiary-action{margin-left:auto}
 }
+
+
+/* Pantry-aware recipe suggestions */
+.recipe-page{max-width:1000px;margin:0 auto}
+.recipe-hero{align-items:flex-end}
+.recipe-hero .shopping-summary{min-width:118px}
+.recipe-search{margin-bottom:15px}
+.recipe-filters{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:20px}
+.recipe-filters button{border:1px solid #dbe5d8;background:#fffdf9;color:#78867c;border-radius:999px;padding:8px 13px;font:600 11px 'DM Sans',sans-serif;cursor:pointer}
+.recipe-filters button.active{background:#e7f0e4;color:#4b6a52;border-color:#ceddca}
+.recipe-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:start}
+.recipe-card{background:#fffdf9;border:1px solid #e0e8dd;border-radius:16px;padding:16px;min-width:0}
+.recipe-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.recipe-card-top .eyebrow{font-size:9px;margin-bottom:5px}
+.recipe-card h3{margin:0;color:#405146;font-size:17px;line-height:1.25}
+.recipe-status{display:inline-flex;align-items:center;justify-content:center;max-width:112px;flex:0 0 auto;background:#f7f0e4;color:#987b47;border-radius:8px;padding:6px 8px;font-size:9px;font-weight:700;text-align:center;line-height:1.3}
+.recipe-status.ready{background:#e8f1e5;color:#517456}
+.recipe-description{min-height:33px;margin:9px 0 12px;color:#859188;font-size:11px;line-height:1.5}
+.recipe-meta{display:flex;flex-wrap:wrap;gap:6px 10px;color:#819087;font-size:10px}
+.recipe-progress{height:4px;background:#edf1e9;border-radius:9px;overflow:hidden;margin:10px 0}
+.recipe-progress span{display:block;height:100%;background:#83a587;border-radius:9px}
+.recipe-hint{background:#fbf3e6;border-radius:8px;padding:8px;color:#927342;font-size:10px;line-height:1.4}
+.recipe-detail-toggle{width:100%;border:0;background:transparent;color:#55745c;padding:9px 0 0;display:flex;justify-content:space-between;align-items:center;font:600 11px 'DM Sans',sans-serif;cursor:pointer}
+.recipe-detail-toggle svg{transition:transform .16s}
+.recipe-detail{border-top:1px solid #e7ece4;margin-top:12px;padding-top:12px}
+.recipe-ingredients,.recipe-steps{display:flex;flex-direction:column;gap:8px}
+.recipe-ingredients>strong,.recipe-steps>strong{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#748279}
+.recipe-ingredient{display:flex;gap:8px;align-items:flex-start}
+.recipe-ingredient-icon{display:grid;place-items:center;flex:0 0 19px;height:19px;border-radius:6px;font-size:11px;font-weight:800}
+.recipe-ingredient-icon.available{background:#e7f1e4;color:#4d7653}
+.recipe-ingredient-icon.missing{background:#fbf0df;color:#9d7a3c}
+.recipe-ingredient-icon.unknown{background:#edf0ed;color:#79867c}
+.recipe-ingredient>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.recipe-ingredient>div strong{font-size:11px;color:#4e5f53}
+.recipe-ingredient>div small{font-size:10px;color:#89958d;line-height:1.4}
+.recipe-steps{margin-top:17px}
+.recipe-steps ol{padding-left:17px;margin:0;color:#69796f;font-size:11px;line-height:1.55}
+.recipe-steps li{padding-left:3px;margin:0 0 6px}
+.recipe-actions{display:flex;flex-direction:column;align-items:stretch;gap:7px;margin-top:17px}
+.recipe-actions button{font-size:11px}
+.recipe-actions small{font-size:10px;color:#8b958e;line-height:1.45}
+.recipe-disclaimer{font-size:10px;color:#929d94;line-height:1.5;margin:18px 0 0}
+.recipe-cook-list{display:flex;flex-direction:column;gap:7px;background:#f7f9f5;border-radius:12px;padding:12px;margin:14px 0}
+.recipe-cook-list>div{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:#6d7c71}
+.recipe-cook-list strong{color:#4d6252}
+@media(max-width:720px){
+  .recipe-grid{grid-template-columns:1fr}
+  .recipe-description{min-height:0}
+  .recipe-card{padding:14px}
+  .recipe-hero{align-items:flex-start}
+}
+@media(max-width:460px){
+  .recipe-hero h2{font-size:27px}
+  .recipe-hero .shopping-summary{min-width:88px;padding:10px}
+  .recipe-filters{gap:5px}
+  .recipe-filters button{font-size:10px;padding:8px 10px}
+}
