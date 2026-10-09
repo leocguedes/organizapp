@@ -347,6 +347,8 @@ function App(){
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
   const[shoppingLoading,setShoppingLoading]=useState(false);
   const[shoppingStockItem,setShoppingStockItem]=useState<ShoppingItem|null>(null);
+  const[consumptionRules,setConsumptionRules]=useState<ConsumptionRule[]>([]);
+  const[consumptionRuleModal,setConsumptionRuleModal]=useState<{foodId:string}|null>(null);
   const[online,setOnline]=useState(()=>navigator.onLine);
   const[authBusy,setAuthBusy]=useState(false);
   const[authMessage,setAuthMessage]=useState<string|null>(null);
@@ -528,6 +530,25 @@ function App(){
       }finally{
         if(active)setShoppingLoading(false);
       }
+    })();
+    return()=>{active=false};
+  },[userId,householdId]);
+
+  useEffect(()=>{
+    if(!userId||!householdId){
+      setConsumptionRules([]);
+      return;
+    }
+    let active=true;
+    const accountId=userId;
+    const activeHouse=householdId;
+    void (async()=>{
+      const{data,error}=await supabase.from('food_consumption_rules').select('*')
+        .eq('household_id',activeHouse)
+        .eq('is_active',true)
+        .order('next_suggestion_on',{ascending:true});
+      if(!active)return;
+      if(!error)setConsumptionRules((data||[]) as ConsumptionRule[]);
     })();
     return()=>{active=false};
   },[userId,householdId]);
@@ -749,12 +770,101 @@ function App(){
     }finally{setHouseholdBusy(false)}
   }
 
+  async function saveConsumptionRule(foodId:string,amount:number,periodDays:number,threshold:number|null,restockQuantity:number|null){
+    if(!userId||!householdId){
+      setAuthModal(true);
+      setAuthMessage('Entre na sua conta para programar o consumo deste alimento.');
+      return;
+    }
+    const existing=consumptionRules.find(rule=>rule.food_id===foodId);
+    const today=localDateString();
+    const rule:ConsumptionRule={
+      id:existing?.id||uid(),
+      household_id:householdId,
+      food_id:foodId,
+      amount,
+      period_days:periodDays,
+      next_suggestion_on:existing?.next_suggestion_on||today,
+      low_stock_threshold:threshold,
+      restock_quantity:restockQuantity,
+      is_active:true,
+      created_by:existing?.created_by||userId,
+      last_confirmed_at:existing?.last_confirmed_at||null
+    };
+    setConsumptionRules(current=>[...current.filter(item=>item.food_id!==foodId),rule]);
+    setConsumptionRuleModal(null);
+    const ok=await writeOrQueue(userId,{
+      userId,table:'food_consumption_rules',action:existing?'update':'upsert',
+      rowId:rule.id,
+      data:existing?{
+        amount:rule.amount,period_days:rule.period_days,low_stock_threshold:rule.low_stock_threshold,
+        restock_quantity:rule.restock_quantity,next_suggestion_on:rule.next_suggestion_on,is_active:true
+      }:rule as unknown as Record<string,unknown>
+    });
+    if(!ok)syncError('Programação salva neste dispositivo; será sincronizada quando a conexão voltar.');
+  }
+
+  async function removeConsumptionRule(foodId:string){
+    if(!userId)return;
+    const rule=consumptionRules.find(item=>item.food_id===foodId);
+    if(!rule)return;
+    setConsumptionRules(current=>current.filter(item=>item.food_id!==foodId));
+    setConsumptionRuleModal(null);
+    const ok=await writeOrQueue(userId,{userId,table:'food_consumption_rules',action:'delete',rowId:rule.id});
+    if(!ok)syncError('Programação removida localmente; a alteração será sincronizada quando a conexão voltar.');
+  }
+
+  async function handleConsumptionSuggestion(rule:ConsumptionRule,confirm:boolean){
+    if(!userId||!householdId||rule.household_id!==householdId)return;
+    const found=places.flatMap(place=>place.subdivisions.map(subdivision=>({place,subdivision})))
+      .map(entry=>({...entry,food:entry.subdivision.foods.find(food=>food.id===rule.food_id)}))
+      .find(entry=>entry.food);
+    if(!found?.food)return;
+    const food=found.food;
+    const previousQuantity=food.quantity;
+    const amount=confirm?Math.min(previousQuantity,rule.amount):0;
+    const nextQuantity=confirm?Math.max(0,Number((previousQuantity-amount).toFixed(3))):previousQuantity;
+    if(confirm){
+      setPlaces(current=>current.map(place=>place.id!==found.place.id?place:{
+        ...place,subdivisions:place.subdivisions.map(subdivision=>subdivision.id!==found.subdivision.id?subdivision:{
+          ...subdivision,foods:subdivision.foods.map(item=>item.id===food.id?{...item,quantity:nextQuantity}:item)
+        })
+      }));
+      const stockOk=await writeOrQueue(userId,{userId,table:'foods',action:'update',rowId:food.id,data:{quantity:nextQuantity}});
+      if(!stockOk)syncError('Consumo registrado localmente; a quantidade será sincronizada quando a conexão voltar.');
+    }
+
+    const eventId=uid();
+    const event={
+      id:eventId,household_id:householdId,food_id:food.id,food_name:food.name,
+      event_type:confirm?'confirmed':'skipped',scheduled_for:rule.next_suggestion_on,
+      amount,previous_quantity:previousQuantity,new_quantity:nextQuantity,created_by:userId
+    };
+    const eventOk=await writeOrQueue(userId,{userId,table:'food_consumption_events',action:'upsert',rowId:eventId,data:event});
+    const nextDate=addIsoDays(localDateString(),confirm?rule.period_days:1);
+    const updatedRule={...rule,next_suggestion_on:nextDate,last_confirmed_at:confirm?new Date().toISOString():rule.last_confirmed_at};
+    setConsumptionRules(current=>current.map(item=>item.id===rule.id?updatedRule:item));
+    const ruleOk=await writeOrQueue(userId,{userId,table:'food_consumption_rules',action:'update',rowId:rule.id,data:{
+      next_suggestion_on:nextDate,last_confirmed_at:updatedRule.last_confirmed_at
+    }});
+    if(!eventOk||!ruleOk)syncError('A revisão foi registrada localmente e será sincronizada quando a conexão voltar.');
+
+    if(confirm&&rule.low_stock_threshold!==null&&rule.restock_quantity!==null&&nextQuantity<=rule.low_stock_threshold){
+      await addShoppingItem(food.name,rule.restock_quantity,food.unit,'low_stock');
+      setAuthMessage(food.name+' foi adicionado à lista de compras porque o estoque ficou baixo.');
+    }else if(confirm){
+      setAuthMessage('Consumo de '+food.name+' confirmado. O estoque foi atualizado.');
+    }else{
+      setAuthMessage('Sugestão de consumo adiada para amanhã.');
+    }
+  }
+
   function persistShopping(next:ShoppingItem[],targetHousehold=householdId,targetUser=userId){
     setShoppingItems(next);
     if(targetUser&&targetHousehold)writeShoppingCache(targetUser,targetHousehold,next);
   }
 
-  async function addShoppingItem(name:string,quantity:number,unit:Unit){
+  async function addShoppingItem(name:string,quantity:number,unit:Unit,source:'manual'|'low_stock'|'recurring'|'recipe'|'meal_plan'='manual'){
     const clean=name.trim();
     if(!clean||!Number.isFinite(quantity)||quantity<=0)return;
     if(!userId||!householdId){
@@ -765,15 +875,15 @@ function App(){
     const duplicate=shoppingItems.find(item=>!item.is_purchased&&searchKey(item.name)===searchKey(clean)&&item.unit===unit);
     if(duplicate){
       const nextQuantity=Number((duplicate.quantity+quantity).toFixed(3));
-      const next=shoppingItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity}:item);
+      const next=shoppingItems.map(item=>item.id===duplicate.id?{...item,quantity:nextQuantity,source:source==='manual'?item.source:source}:item);
       persistShopping(next);
-      const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity}});
+      const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'update',rowId:duplicate.id,data:{quantity:nextQuantity,...(source!=='manual'?{source}:{})}});
       if(!ok)syncError('Quantidade atualizada na lista deste dispositivo; será sincronizada quando a conexão voltar.');
       return;
     }
     const item:ShoppingItem={
       id:uid(),household_id:householdId,name:clean,quantity,unit,
-      is_purchased:false,source:'manual',created_by:userId,created_at:new Date().toISOString()
+      is_purchased:false,source,created_by:userId,created_at:new Date().toISOString()
     };
     persistShopping([item,...shoppingItems]);
     const ok=await writeOrQueue(userId,{userId,table:'shopping_items',action:'upsert',rowId:item.id,data:item as unknown as Record<string,unknown>});
