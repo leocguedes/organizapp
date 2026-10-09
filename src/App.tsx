@@ -4,7 +4,7 @@ import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
 import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
 import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
-import{Apple,BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
@@ -56,6 +56,20 @@ function expiryCaption(dateText:string){
   if(days===0)return 'Vence hoje';
   if(days===1)return 'Vence amanhã';
   return 'Vence em '+days+' dias';
+}
+function locationEmoji(name:string){
+  const normalized=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if(/geladeira|refrigerador|fridge/.test(normalized))return '🧊';
+  if(/freezer|congelador/.test(normalized))return '❄️';
+  if(/armario|cabinet/.test(normalized))return '🗄️';
+  if(/despensa|pantry/.test(normalized))return '🥫';
+  if(/gaveta|drawer/.test(normalized))return '🗃️';
+  if(/prateleira|estante|shelf/.test(normalized))return '🪵';
+  if(/cozinha|kitchen/.test(normalized))return '🍳';
+  if(/lavanderia|lavandaria|laundry/.test(normalized))return '🧺';
+  if(/banheiro|casa de banho|bathroom/.test(normalized))return '🧴';
+  if(/quarto|bedroom/.test(normalized))return '🛏️';
+  return '📦';
 }
 const authRedirectUrl=()=>new URL(import.meta.env.BASE_URL,window.location.origin).toString();
 const makeSub=(name:string,foods:Food[]=[]):Sub=>({id:uid(),name,foods});
@@ -1538,7 +1552,7 @@ function App(){
 
             <div className="location-hero">
               <div className="location-identity">
-                <div className="location-icon"><Box size={23}/></div>
+                <div className="location-icon" aria-hidden="true">{locationEmoji(current?.name||'')}</div>
                 <div>
                   <p className="eyebrow">LOCAL</p>
                   <h2>{current?.name}</h2>
@@ -1560,7 +1574,7 @@ function App(){
                   <div className="food-list">
                     {sub.foods.map(f=>(
                       <div className={'food '+(f.quantity===0?'out-of-stock':'')} key={f.id}>
-                        <div className="food-icon"><Apple size={19}/></div>
+                        
                         <div className="food-name">
                           <strong>{f.name}</strong>
                           <span>{f.quantity===0?'Sem estoque · ':''}{f.unit}</span>
@@ -1738,7 +1752,7 @@ function App(){
                         onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openPlace(p.id)}}}
                       >
                         <div className="place-top">
-                          <div className="place-icon"><Box size={21}/></div>
+                          <div className="place-icon" aria-hidden="true">{locationEmoji(p.name)}</div>
                           <div className="place-card-actions">
                             <button className="card-edit" title="Renomear local" aria-label={'Renomear '+p.name} onClick={e=>{e.stopPropagation();setPlaceToEdit(p.id);setPlaceModal(true)}}>
                               <Edit3 size={16}/>
