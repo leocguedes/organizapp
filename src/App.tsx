@@ -4,7 +4,7 @@ import{formatQuantity,quantityStep,searchKey,units}from'./lib/domain';
 import type{Unit}from'./lib/domain';
 import{convertRecipeQuantity,getRecipeIngredientStatuses,matchesRecipeIngredient,recipes}from'./lib/recipes';
 import type{Recipe,RecipeIngredient,RecipePantryItem}from'./lib/recipes';
-import{Apple,BookOpen,Box,CalendarClock,ChevronRight,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
+import{Apple,BookOpen,Box,CalendarClock,ChevronRight,ClipboardList,Copy,Edit3,Home,Minus,MoreHorizontal,MoveRight,PackagePlus,Plus,Search,Settings,ShoppingCart,Trash2,Users,X}from'lucide-react';
 import{supabase}from'./lib/supabase';
 
 type RecentFood={name:string;unit:Unit};
@@ -373,7 +373,9 @@ function App(){
   const[householdJoinCode,setHouseholdJoinCode]=useState('');
   const[householdInvite,setHouseholdInvite]=useState<{code:string;expiresAt:string}|null>(null);
   const[householdCopied,setHouseholdCopied]=useState(false);
-  const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'>('inventory');
+  const[workspace,setWorkspace]=useState<'inventory'|'shopping'|'recipes'|'report'>('inventory');
+  const[reportSearch,setReportSearch]=useState('');
+  const[reportLocation,setReportLocation]=useState('all');
   const[shoppingItems,setShoppingItems]=useState<ShoppingItem[]>([]);
   const[recurringRules,setRecurringRules]=useState<RecurringShoppingRule[]>([]);
   const[recurringRuleBusy,setRecurringRuleBusy]=useState(false);
@@ -1279,6 +1281,13 @@ function App(){
   const current=places.find(p=>p.id===selected);
   const sub=current?.subdivisions.find(s=>s.id===selectedSub);
   const total=places.reduce((n,p)=>n+p.subdivisions.reduce((m,s)=>m+s.foods.length,0),0);
+  const reportFoods=useMemo(()=>{
+    const query=searchKey(reportSearch.trim());
+    return places.flatMap(place=>place.subdivisions.flatMap(subdivision=>subdivision.foods.map(food=>({
+      ...food,placeName:place.name,placeId:place.id,subId:subdivision.id
+    })))).filter(food=>(reportLocation==='all'||food.placeId===reportLocation)&&(!query||searchKey(food.name).includes(query)))
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  },[places,reportSearch,reportLocation]);
   const results=useMemo(()=>{
     const q=searchKey(search.trim());
     if(!q)return[];
@@ -1549,6 +1558,7 @@ function App(){
           <button className={workspace==='inventory'?'active':''} onClick={()=>setWorkspace('inventory')}><Box size={17}/> Estoque</button>
           <button className={workspace==='shopping'?'active':''} onClick={()=>setWorkspace('shopping')}><ShoppingCart size={17}/> Compras{shoppingItems.filter(item=>!item.is_purchased).length>0&&<span>{shoppingItems.filter(item=>!item.is_purchased).length}</span>}</button>
           <button className={workspace==='recipes'?'active':''} onClick={()=>setWorkspace('recipes')}><BookOpen size={17}/> Receitas</button>
+          <button className={workspace==='report'?'active':''} onClick={()=>setWorkspace('report')}><ClipboardList size={17}/> Relatório</button>
         </nav>}
 
         {selected?(
@@ -1639,6 +1649,36 @@ function App(){
           />
         ):workspace==='recipes'?(
           <RecipePage places={places} onAddMissing={addRecipeMissing} onCook={recipe=>setCookConfirmRecipe(recipe)}/>
+        ):workspace==='report'?(
+          <section className="inventory-report">
+            <div className="hero report-hero">
+              <div className="hero-copy">
+                <p className="eyebrow">VISÃO GERAL</p>
+                <h2>Relatório de alimentos</h2>
+                <p>Consulte tudo o que está cadastrado, onde fica, quanto há e a validade informada.</p>
+              </div>
+              <div className="total report-total"><span>{reportFoods.length}</span><small>{reportFoods.length===1?'alimento listado':'alimentos listados'}</small><em>de {total} no estoque</em></div>
+            </div>
+            <div className="report-filters">
+              <label className="report-search"><Search size={18}/><input value={reportSearch} onChange={e=>setReportSearch(e.target.value)} placeholder="Buscar alimento..." aria-label="Buscar alimento no relatório"/></label>
+              <label className="report-location-filter"><span>Local de armazenamento</span><select value={reportLocation} onChange={e=>setReportLocation(e.target.value)}><option value="all">Todos os locais</option>{places.map(place=><option key={place.id} value={place.id}>{place.name}</option>)}</select></label>
+            </div>
+            {reportFoods.length?(
+              <div className="report-table-wrap">
+                <table className="report-table">
+                  <thead><tr><th>Alimento</th><th>Onde está</th><th>Quantidade</th><th>Validade</th></tr></thead>
+                  <tbody>{reportFoods.map(food=><tr key={food.id}>
+                    <td data-label="Alimento"><strong>{food.name}</strong></td>
+                    <td data-label="Onde está"><button className="report-place-link" onClick={()=>{setSelected(food.placeId);setSelectedSub(food.subId)}}>{locationEmoji(food.placeName)} {food.placeName}<ChevronRight size={14}/></button></td>
+                    <td data-label="Quantidade"><span className="report-quantity">{formatQuantity(food.quantity)} {food.unit}</span>{food.quantity===0&&<small className="report-out">Sem estoque</small>}</td>
+                    <td data-label="Validade">{food.expires_on?<span className="report-expiry"><strong>{food.expires_on.split('-').reverse().join('/')}</strong><small className={'expiry-label '+(daysUntilExpiry(food.expires_on)<0?'expired':daysUntilExpiry(food.expires_on)<=3?'urgent':'')}>{expiryCaption(food.expires_on)}</small></span>:<span className="report-no-expiry">Não informada</span>}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            ):(
+              <div className="report-empty"><ClipboardList size={28}/><strong>{total===0?'Seu estoque ainda está vazio':'Nenhum alimento encontrado'}</strong><span>{total===0?'Cadastre alimentos nos locais para que eles apareçam neste relatório.':'Tente mudar a busca ou selecionar outro local.'}</span>{(reportSearch||reportLocation!=='all')&&<button className="secondary-action" onClick={()=>{setReportSearch('');setReportLocation('all')}}>Limpar filtros</button>}</div>
+            )}
+          </section>
         ):(
           <section>
             <div className="hero">
