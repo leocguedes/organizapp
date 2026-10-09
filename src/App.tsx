@@ -481,11 +481,12 @@ function App(){
     const activeHouse=householdId;
     setShoppingItems(readShoppingCache(accountId,activeHouse));
     setShoppingLoading(true);
-    supabase.from('shopping_items').select('*')
-      .eq('household_id',activeHouse)
-      .order('is_purchased',{ascending:true})
-      .order('created_at',{ascending:false})
-      .then(({data,error})=>{
+    void (async()=>{
+      try{
+        const{data,error}=await supabase.from('shopping_items').select('*')
+          .eq('household_id',activeHouse)
+          .order('is_purchased',{ascending:true})
+          .order('created_at',{ascending:false});
         if(!active)return;
         if(error){
           setAuthMessage('A lista de compras está disponível em cache, mas não foi possível sincronizá-la agora.');
@@ -495,8 +496,10 @@ function App(){
         const items=mapShoppingItems(data||[]);
         setShoppingItems(items);
         writeShoppingCache(accountId,activeHouse,items);
-      })
-      .finally(()=>{if(active)setShoppingLoading(false)});
+      }finally{
+        if(active)setShoppingLoading(false);
+      }
+    })();
     return()=>{active=false};
   },[userId,householdId]);
 
