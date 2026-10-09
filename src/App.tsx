@@ -969,6 +969,9 @@ function App(){
           <div><h1>OrganizaApp</h1><span>Sua casa, organizada.</span></div>
         </div>
         <div className="header-actions">
+          {user&&!user.is_anonymous&&<button className="sync-btn family-btn" onClick={()=>setHouseholdModal(true)} disabled={householdBusy} title="Compartilhar esta casa com a família">
+            <Users size={16}/><span>{households.find(h=>h.id===householdId)?.name||'Família'}</span>
+          </button>}
           <button className="sync-btn" onClick={user&&!user.is_anonymous?signOut:()=>setAuthModal(true)} disabled={authBusy}>
             <span className="auth-label">{user&&!user.is_anonymous?'Sair':(authBusy?'Aguarde...':'Criar conta / Entrar')}</span>
             <span className="auth-short">{user&&!user.is_anonymous?'Sair':'Entrar'}</span>
@@ -1212,6 +1215,20 @@ function App(){
       {placeModal&&<PlaceModal places={places} initialEditId={placeToEdit} onClose={()=>{setPlaceModal(false);setPlaceToEdit(null)}} onSave={savePlace} onDelete={async id=>{const ok=await removePlace(id);if(ok){setPlaceModal(false);setPlaceToEdit(null)}return ok}}/>}
       {subModal&&<SubModal data={subModal.sub} onClose={()=>setSubModal(null)} onSave={n=>saveSub(subModal.place,n,subModal.sub?.id)} onDelete={id=>removeSub(subModal.place,id)}/>}
       {authModal&&<AuthModal busy={authBusy} onClose={()=>setAuthModal(false)} onSubmit={handleEmailAuth} onReset={resetPassword}/>}
+      {householdModal&&<HouseholdModal
+        busy={householdBusy}
+        households={households}
+        activeHouseholdId={householdId}
+        invite={householdInvite}
+        joinCode={householdJoinCode}
+        copied={householdCopied}
+        onClose={()=>setHouseholdModal(false)}
+        onSwitch={id=>void activateHousehold(id,userId,true)}
+        onCreateInvite={createHouseholdInvite}
+        onJoin={joinHousehold}
+        onJoinCodeChange={setHouseholdJoinCode}
+        onCopy={async code=>{try{await navigator.clipboard.writeText(code);setHouseholdCopied(true)}catch{setAuthMessage('Não foi possível copiar automaticamente. Selecione o código para copiá-lo.')}}}
+      />}
       {passwordRecovery&&<PasswordRecoveryModal busy={authBusy} onClose={()=>setPasswordRecovery(false)} onSubmit={updatePassword}/>}
       {undo&&<div className="undo-toast" role="status" aria-live="polite"><span>{undo.label}</span><button onClick={consumeUndo}>Desfazer</button></div>}
     </div>
@@ -1242,6 +1259,33 @@ function AuthModal({busy,onClose,onSubmit,onReset}:{busy:boolean;onClose:()=>voi
     <button className="primary full" disabled={busy||!email.trim()||password.length<6} onClick={()=>onSubmit(mode,email.trim(),password)}>{busy?'Aguarde...':mode==='signin'?'Entrar':'Criar conta'}</button>
     {mode==='signin'&&<button className="auth-link" disabled={busy||!email.trim()} onClick={()=>onReset(email.trim())}>Esqueci minha senha</button>}
     <button className="auth-switch" onClick={()=>setMode(mode==='signin'?'signup':'signin')}>{mode==='signin'?'Ainda não tenho uma conta':'Já tenho uma conta'}</button>
+  </Modal>
+}
+
+function HouseholdModal({busy,households,activeHouseholdId,invite,joinCode,copied,onClose,onSwitch,onCreateInvite,onJoin,onJoinCodeChange,onCopy}:{busy:boolean;households:Household[];activeHouseholdId:string|null;invite:{code:string;expiresAt:string}|null;joinCode:string;copied:boolean;onClose:()=>void;onSwitch:(id:string)=>void;onCreateInvite:()=>void;onJoin:()=>void;onJoinCodeChange:(value:string)=>void;onCopy:(code:string)=>void}){
+  const active=households.find(h=>h.id===activeHouseholdId);
+  const canInvite=active?.role==='owner'||active?.role==='admin';
+  return <Modal title="Casa compartilhada" onClose={onClose}>
+    <p className="modal-help">Compartilhe estoque e organização com quem mora com você. Cada casa mantém seus próprios alimentos.</p>
+    {households.length>1&&<label>Casa ativa<select value={activeHouseholdId||''} disabled={busy} onChange={e=>onSwitch(e.target.value)}>{households.map(h=><option key={h.id} value={h.id}>{h.name}{h.is_personal?' · pessoal':''}</option>)}</select></label>}
+    <div className="household-panel">
+      <div className="household-panel-heading"><Users size={18}/><strong>{active?.name||'Sua casa'}</strong></div>
+      <p>{active?.is_personal?'Esta é sua casa pessoal. Você pode convidar familiares para compartilhar o mesmo estoque.':'Você está vendo o estoque compartilhado desta casa.'}</p>
+      {canInvite?<>
+        <button className="primary full" disabled={busy} onClick={onCreateInvite}><Users size={16}/> {busy?'Aguarde...':'Gerar convite para familiares'}</button>
+        {invite&&<div className="household-invite">
+          <span>Código de convite</span>
+          <div><strong>{invite.code}</strong><button type="button" onClick={()=>onCopy(invite.code)} aria-label="Copiar código de convite"><Copy size={16}/>{copied?'Copiado':'Copiar'}</button></div>
+          <small>Expira em {new Date(invite.expiresAt).toLocaleDateString('pt-BR')} · até 10 usos</small>
+        </div>}
+      </>:<p className="household-note">Somente proprietários e administradores podem gerar convites.</p>}
+    </div>
+    <div className="household-join">
+      <strong>Entrar em outra casa</strong>
+      <p>Digite o código de convite que um familiar compartilhou com você.</p>
+      <label>Código<input value={joinCode} onChange={e=>onJoinCodeChange(e.target.value.toUpperCase())} placeholder="Ex.: A1B2C3D4E5" autoComplete="off"/></label>
+      <button className="primary full" disabled={busy||joinCode.trim().length<6} onClick={onJoin}>{busy?'Aguarde...':'Entrar na casa'}</button>
+    </div>
   </Modal>
 }
 
