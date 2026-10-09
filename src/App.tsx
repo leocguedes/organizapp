@@ -263,6 +263,18 @@ function operationKey(op:PendingOperation){
   return op.table+':'+op.action+':'+(op.rowId||String(op.data?.id||''));
 }
 
+function syncEntityKey(op:Pick<PendingOperation,'table'|'rowId'|'data'>){
+  return op.table+':'+(op.rowId||String(op.data?.id||''));
+}
+
+function clearPendingForEntity(userId:string,operation:Omit<PendingOperation,'id'>){
+  const entity=syncEntityKey(operation);
+  if(!entity.split(':').at(-1))return;
+  const queue=readPendingSync();
+  const next=queue.filter(op=>!(op.userId===userId&&syncEntityKey(op)===entity));
+  if(next.length!==queue.length)writePendingSync(next);
+}
+
 function queuePendingSync(operation:Omit<PendingOperation,'id'>){
   const queue=readPendingSync();
   const next=queue.filter(op=>!(op.userId===operation.userId&&operationKey(op)===operationKey({...operation,id:''})));
@@ -313,6 +325,9 @@ async function writeOrQueue(userId:string,operation:Omit<PendingOperation,'id'>)
   }
   try{
     await applyPendingSync({...operation,id:uid()});
+    // A newer online write makes queued writes for the same row obsolete.
+    // Clear them so reconnecting later cannot restore an older quantity/state.
+    clearPendingForEntity(userId,operation);
     return true;
   }catch{
     queuePendingSync(operation);
